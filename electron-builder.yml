@@ -1,0 +1,34 @@
+appId: com.worklog.app
+productName: 日志工具
+directories:
+  buildResources: build
+  output: dist
+# 自动更新发布渠道（GitHub Releases）：发布前请将 owner/repo 改为真实仓库，
+# 并在打包/发布时设置 GH_TOKEN 环境变量。
+publish:
+  provider: github
+  owner: lqh
+  repo: worklog
+# 主进程/预加载只用到 electron 与 Node 内置模块，渲染层已由 vite 完整打包，
+# 因此只需携带 out 产物与 package.json，安装包体积更小。
+files:
+  - out/**
+  - package.json
+asar: true
+# 运行时窗口/托盘图标：复制到 resources 供主进程读取
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+win:
+  executableName: WorkLog
+  icon: build/icon.png
+  target:
+    - nsis
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: 日志工具
+  uninstallDisplayName: 日志工具
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false

@@ -1,0 +1,656 @@
+import { useEffect, useState } from 'react'
+import type { PublishRecord, Subtask, Tag, Task } from '../types'
+import { enumerateDates, toDateStr, weekInfoOf, type PublishGranularity } from '../utils/date'
+import MarkdownEditor from './MarkdownEditor'
+import RichView from './RichView'
+import TagPicker from './TagPicker'
+import Modal from './Modal'
+import Drawer from './Drawer'
+import DatePicker from './DatePicker'
+import MultiSelect from './MultiSelect'
+
+interface TaskPublishProps {
+  tags: Tag[]
+  projectId: string
+  onStatus: (msg: string) => void
+  onPublished: () => void
+  onGoToTags: () => void
+}
+
+const GRANULARITY_OPTIONS: { value: PublishGranularity; label: string }[] = [
+  { value: 'day', label: '按日' },
+  { value: 'week', label: '按周' },
+  { value: 'month', label: '按月' },
+  { value: 'year', label: '按年' }
+]
+
+/** 判断某日是否落在「锚点日期」的指定粒度周期内 */
+function inPeriod(dateStr: string, anchor: string, g: PublishGranularity): boolean {
+  if (g === 'day') return dateStr === anchor
+  if (g === 'week') return weekInfoOf(dateStr).weekKey === weekInfoOf(anchor).weekKey
+  if (g === 'month') return dateStr.slice(0, 7) === anchor.slice(0, 7)
+  return dateStr.slice(0, 4) === anchor.slice(0, 4)
+}
+
+/** 粒度对应的范围说明 */
+function histRangeLabel(g: PublishGranularity, anchor: string): string {
+  if (!anchor) return ''
+  if (g === 'day') return `单日：${anchor}`
+  if (g === 'week') {
+    const wi = weekInfoOf(anchor)
+    return `第 ${wi.week} 周：${wi.start} ~ ${wi.end}`
+  }
+  if (g === 'month') return `月度：${anchor.slice(0, 7)}`
+  return `年度：${anchor.slice(0, 4)}`
+}
+
+export default function TaskPublish({
+  tags,
+  projectId,
+  onStatus,
+  onPublished,
+  onGoToTags
+}: TaskPublishProps) {
+  const [showForm, setShowForm] = useState(false)
+  const [title, setTitle] = useState('')
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [body, setBody] = useState('')
+  const [rangeMode, setRangeMode] = useState(false)
+  const today = toDateStr(new Date())
+  const [singleDate, setSingleDate] = useState(today)
+  const [start, setStart] = useState(today)
+  const [end, setEnd] = useState(today)
+  const [history, setHistory] = useState<PublishRecord[]>([])
+  const [detail, setDetail] = useState<PublishRecord | null>(null)
+  const [query, setQuery] = useState('')
+  const [subtasks, setSubtasks] = useState<Subtask[]>([])
+  const [subInput, setSubInput] = useState('')
+  const [openSubtag, setOpenSubtag] = useState<string | null>(null)
+  // 发布历史粒度筛选（独立于发布表单）
+  const [histGran, setHistGran] = useState<PublishGranularity>('month')
+  const [histDate, setHistDate] = useState(today)
+
+  // 已发布任务列表
+  const [pubTab, setPubTab] = useState<'history' | 'published'>('published')
+  const [published, setPublished] = useState<{ date: string; task: Task }[]>([])
+  const [editingTask, setEditingTask] = useState<{ date: string; task: Task } | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editBody, setEditBody] = useState('')
+  const [editTags, setEditTags] = useState<string[]>([])
+
+  useEffect(() => {
+    window.api.listPublishHistory().then(setHistory)
+  }, [])
+
+  async function refreshPublished(): Promise<void> {
+    const dates = await window.api.listTaskDates()
+    if (dates.length === 0) {
+      setPublished([])
+      return
+    }
+    const map = await window.api.readTasksMany(dates)
+    const list: { date: string; task: Task }[] = []
+    for (const [d, ts] of Object.entries(map)) {
+      for (const t of ts) {
+        if (t.projectId === projectId) list.push({ date: d, task: t })
+      }
+    }
+    list.sort((a, b) => (a.date < b.date ? 1 : -1))
+    setPublished(list)
+  }
+
+  useEffect(() => {
+    refreshPublished()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  async function togglePublished(entry: { date: string; task: Task }): Promise<void> {
+    await window.api.updateTask(entry.date, entry.task.id, { done: !entry.task.done })
+    onPublished()
+    refreshPublished()
+  }
+
+  async function deletePublished(entry: { date: string; task: Task }): Promise<void> {
+    if (window.confirm(`删除任务「${entry.task.title}」（${entry.date}）？`)) {
+      await window.api.deleteTask(entry.date, entry.task.id)
+      onPublished()
+      refreshPublished()
+      onStatus('已删除任务')
+    }
+  }
+
+  function openEdit(entry: { date: string; task: Task }): void {
+    setEditingTask(entry)
+    setEditTitle(entry.task.title)
+    setEditBody(entry.task.body)
+    setEditTags(entry.task.tags)
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (!editingTask) return
+    if (!editTitle.trim()) {
+      onStatus('请填写任务标题')
+      return
+    }
+    await window.api.updateTask(editingTask.date, editingTask.task.id, {
+      title: editTitle.trim(),
+      body: editBody,
+      tags: editTags
+    })
+    setEditingTask(null)
+    onPublished()
+    refreshPublished()
+    onStatus('已保存任务')
+  }
+
+  function refreshHistory(): void {
+    window.api.listPublishHistory().then(setHistory)
+  }
+
+  function resetForm(): void {
+    setTitle('')
+    setSelectedTags([])
+    setBody('')
+    setSubtasks([])
+    setSubInput('')
+    setOpenSubtag(null)
+  }
+
+  function openForm(): void {
+    resetForm()
+    setShowForm(true)
+  }
+
+  function closeForm(): void {
+    setShowForm(false)
+  }
+
+  async function publish(): Promise<void> {
+    if (!title.trim()) {
+      onStatus('请填写任务标题')
+      return
+    }
+    let dates: string[]
+    if (rangeMode) {
+      if (!start || !end) {
+        onStatus('请选择日期范围')
+        return
+      }
+      if (end < start) {
+        onStatus('结束日期不能早于开始日期')
+        return
+      }
+      dates = enumerateDates(start, end)
+    } else {
+      dates = [singleDate]
+    }
+    if (dates.length === 0) {
+      onStatus('该区间内没有可发布的日期')
+      return
+    }
+    const r = await window.api.publishTasks(dates, [projectId], {
+      title: title.trim(),
+      tags: selectedTags,
+      body,
+      subtasks,
+      projectId
+    })
+    onStatus(`已发布到 ${r.count} 个实例`)
+    onPublished()
+    refreshHistory()
+    refreshPublished()
+    closeForm()
+  }
+
+  async function removeRecord(rec: PublishRecord): Promise<void> {
+    if (window.confirm(`删除发布记录「${rec.title}」？该次发布的所有任务实例将移入回收站。`)) {
+      await window.api.trashPublishRecord(rec.id)
+      if (detail?.id === rec.id) setDetail(null)
+      refreshHistory()
+      onPublished()
+      onStatus('已移入回收站')
+    }
+  }
+
+  function fmtDates(dates: string[]): string {
+    if (dates.length === 0) return ''
+    if (dates.length === 1) return dates[0]
+    return `${dates[0]} ~ ${dates[dates.length - 1]}（共 ${dates.length} 个）`
+  }
+
+  const tagById = new Map(tags.map((t) => [t.id, t]))
+
+  const filteredHistory = history.filter((rec) => {
+    const pubDate = toDateStr(new Date(rec.publishedAt))
+    if (!inPeriod(pubDate, histDate, histGran)) return false
+    if (!query.trim()) return true
+    const q = query.trim().toLowerCase()
+    return (
+      rec.title.toLowerCase().includes(q) ||
+      rec.tags.some((id) => tagById.get(id)?.name.includes(query.trim()))
+    )
+  })
+
+  return (
+    <div className="publish-view">
+      <div className="date-heading">
+        <h2>任务发布</h2>
+        <button className="ghost-btn" onClick={openForm}>
+          ➕ 发布任务
+        </button>
+        <span className="weekday">发布后自动同步到所选日期的日报中</span>
+      </div>
+
+      <div className="publish-tabs">
+        <button
+          className={pubTab === 'published' ? 'tab-btn active' : 'tab-btn'}
+          onClick={() => setPubTab('published')}
+        >
+          已发布任务
+        </button>
+        <button
+          className={pubTab === 'history' ? 'tab-btn active' : 'tab-btn'}
+          onClick={() => setPubTab('history')}
+        >
+          发布历史
+        </button>
+      </div>
+
+      {pubTab === 'published' && (
+        <div className="published-list">
+          {published.length === 0 ? (
+            <div className="task-empty">当前项目暂无已发布任务</div>
+          ) : (
+            published.map((entry) => (
+              <div key={entry.task.id} className={'publish-record' + (entry.task.done ? ' done' : '')}>
+                <div className="publish-record-main">
+                  <span className="publish-record-title">{entry.task.title || '（未命名）'}</span>
+                  <span className="publish-record-meta">
+                    {entry.date} · 派发 {new Date(entry.task.publishedAt).toLocaleString()}
+                  </span>
+                  {entry.task.completedAt && (
+                    <span className="publish-record-time">
+                      完成于 {new Date(entry.task.completedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="publish-record-tags">
+                  {entry.task.tags.map((id) => {
+                    const t = tagById.get(id)
+                    if (!t) return null
+                    return (
+                      <span key={id} className="task-item-tag" style={{ borderColor: t.color, color: t.color }}>
+                        {t.name}
+                      </span>
+                    )
+                  })}
+                </div>
+                <div className="publish-record-actions" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="task-check"
+                    checked={entry.task.done}
+                    onChange={() => togglePublished(entry)}
+                    title="勾选完成"
+                  />
+                  <button className="icon-btn" onClick={() => openEdit(entry)} title="编辑任务">
+                    ✏️
+                  </button>
+                  <button className="icon-btn danger" onClick={() => deletePublished(entry)} title="删除任务">
+                    🗑
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {pubTab === 'history' && (
+      <div className="publish-history">
+        <div className="publish-history-head">
+          <h3>发布历史</h3>
+          <div className="publish-filter">
+            <select
+              className="gran-select"
+              value={histGran}
+              onChange={(e) => setHistGran(e.target.value as PublishGranularity)}
+              title="筛选粒度"
+            >
+              {GRANULARITY_OPTIONS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+            <DatePicker value={histDate} onChange={setHistDate} title="筛选时间段" />
+            <span className="publish-preview muted">{histRangeLabel(histGran, histDate)}</span>
+          </div>
+          <input
+            className="publish-search"
+            placeholder="搜索标题或标签…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        {filteredHistory.length === 0 ? (
+          <div className="task-empty">
+            {query.trim() ? '没有匹配的发布记录' : '该时间段暂无发布记录'}
+          </div>
+        ) : (
+          filteredHistory.map((rec) => (
+            <div
+              key={rec.id}
+              className="publish-record"
+              onClick={() => setDetail(rec)}
+              title="点击查看详情"
+            >
+              <div className="publish-record-main">
+                <span className="publish-record-title">{rec.title}</span>
+                <span className="publish-record-meta">{fmtDates(rec.dates)}</span>
+                <span className="publish-record-time">
+                  {new Date(rec.publishedAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="publish-record-tags">
+                {rec.tags.map((id) => {
+                  const t = tagById.get(id)
+                  if (!t) return null
+                  return (
+                    <span
+                      key={id}
+                      className="task-item-tag"
+                      style={{ borderColor: t.color, color: t.color }}
+                    >
+                      {t.name}
+                    </span>
+                  )
+                })}
+              </div>
+              <div className="publish-record-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="icon-btn danger"
+                  onClick={() => removeRecord(rec)}
+                  title="删除该条记录"
+                >
+                  🗑
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      )}
+
+      <Modal open={showForm} title="发布任务" width={900} onClose={closeForm}>
+        <div className="publish-form">
+          <input
+            className="publish-title"
+            placeholder="任务标题"
+            value={title}
+            autoFocus
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <TagPicker
+            selectedIds={selectedTags}
+            allTags={tags}
+            onChange={setSelectedTags}
+            onGoToTags={onGoToTags}
+          />
+
+          <div className="subtask-editor">
+            <div className="subtask-add-row">
+              <input
+                className="subtask-add-input"
+                placeholder="添加子任务（回车添加）"
+                value={subInput}
+                onChange={(e) => setSubInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const v = subInput.trim()
+                    if (!v) return
+                    setSubtasks((prev) => [
+                      ...prev,
+                      { id: crypto.randomUUID(), title: v, done: false, tags: [] }
+                    ])
+                    setSubInput('')
+                  }
+                }}
+              />
+              <button
+                className="icon-btn primary"
+                title="添加子任务"
+                onClick={() => {
+                  const v = subInput.trim()
+                  if (!v) return
+                  setSubtasks((prev) => [
+                    ...prev,
+                    { id: crypto.randomUUID(), title: v, done: false, tags: [] }
+                  ])
+                  setSubInput('')
+                }}
+              >
+                ＋
+              </button>
+            </div>
+            {subtasks.length > 0 && (
+              <div className="subtask-list">
+                {subtasks.map((st) => (
+                  <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
+                    <input
+                      type="checkbox"
+                      className="task-check"
+                      checked={st.done}
+                      onChange={() =>
+                        setSubtasks((prev) =>
+                          prev.map((s) => (s.id === st.id ? { ...s, done: !s.done } : s))
+                        )
+                      }
+                    />
+                    <span className="subtask-title">{st.title}</span>
+                    <span className="subtask-tags">
+                      {st.tags.map((id) => {
+                        const t = tagById.get(id)
+                        if (!t) return null
+                        return (
+                          <span
+                            key={id}
+                            className="task-item-tag"
+                            style={{ borderColor: t.color, color: t.color }}
+                          >
+                            {t.name}
+                          </span>
+                        )
+                      })}
+                    </span>
+                    <button
+                      className="tag-add-chip"
+                      onClick={() => setOpenSubtag(openSubtag === st.id ? null : st.id)}
+                      title="添加标签"
+                    >
+                      + 标签
+                    </button>
+                    <button
+                      className="icon-btn danger"
+                      title="删除子任务"
+                      onClick={() => setSubtasks((prev) => prev.filter((s) => s.id !== st.id))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {openSubtag && (
+              <div className="subtask-tag-menu">
+                {tags.map((t) => {
+                  const st = subtasks.find((s) => s.id === openSubtag)
+                  const active = st?.tags.includes(t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      className={'subtask-tag-item' + (active ? ' active' : '')}
+                      onClick={() => {
+                        setSubtasks((prev) =>
+                          prev.map((s) => {
+                            if (s.id !== openSubtag) return s
+                            const has = s.tags.includes(t.id)
+                            return {
+                              ...s,
+                              tags: has ? s.tags.filter((x) => x !== t.id) : [...s.tags, t.id]
+                            }
+                          })
+                        )
+                      }}
+                    >
+                      <span className="tag-dot" style={{ background: t.color }} />
+                      {t.name}
+                      {active && ' ✓'}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="publish-dates">
+            <div className="publish-mode">
+              <label>
+                <input
+                  type="radio"
+                  name="pubmode"
+                  checked={!rangeMode}
+                  onChange={() => setRangeMode(false)}
+                />
+                单日
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="pubmode"
+                  checked={rangeMode}
+                  onChange={() => setRangeMode(true)}
+                />
+                区间
+              </label>
+            </div>
+            {rangeMode ? (
+              <div className="publish-range">
+                <DatePicker value={start} onChange={setStart} title="起始日期" />
+                <span>至</span>
+                <DatePicker value={end} onChange={setEnd} title="结束日期" />
+              </div>
+            ) : (
+              <DatePicker value={singleDate} onChange={setSingleDate} title="发布日期" />
+            )}
+          </div>
+
+          <div className="publish-body">
+            <MarkdownEditor
+              value={body}
+              onChange={setBody}
+              attachFolder="publish"
+              onStatus={onStatus}
+            />
+          </div>
+
+          <div className="publish-actions">
+            <button className="publish-btn" onClick={publish}>
+              发布任务
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Drawer open={detail !== null} title="发布详情" onClose={() => setDetail(null)}>
+        {detail && (
+          <div className="publish-detail">
+            <h3 className="publish-detail-title">{detail.title}</h3>
+            <div className="tag-chips">
+              {detail.tags.map((id) => {
+                const t = tagById.get(id)
+                if (!t) return null
+                return (
+                  <span
+                    key={id}
+                    className="task-item-tag"
+                    style={{ borderColor: t.color, color: t.color }}
+                  >
+                    {t.name}
+                  </span>
+                )
+              })}
+              {detail.tags.length === 0 && <span className="muted">（无标签）</span>}
+            </div>
+            <div className="publish-detail-meta">
+              <div>目标日期：{fmtDates(detail.dates)}</div>
+              <div>发布时间：{new Date(detail.publishedAt).toLocaleString()}</div>
+            </div>
+            {(detail.subtasks ?? []).length > 0 && (
+              <div className="subtask-list read">
+                {(detail.subtasks ?? []).map((st) => (
+                  <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
+                    <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+                    <span className="subtask-title">{st.title}</span>
+                    <span className="subtask-tags">
+                      {st.tags.map((id) => {
+                        const t = tagById.get(id)
+                        if (!t) return null
+                        return (
+                          <span
+                            key={id}
+                            className="task-item-tag"
+                            style={{ borderColor: t.color, color: t.color }}
+                          >
+                            {t.name}
+                          </span>
+                        )
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {detail.body ? (
+              <RichView content={detail.body} />
+            ) : (
+              <div className="task-empty">该记录无正文（旧版发布记录）</div>
+            )}
+          </div>
+        )}
+      </Drawer>
+
+      <Modal open={editingTask !== null} title="编辑任务" width={760} onClose={() => setEditingTask(null)}>
+        <div className="publish-form">
+          <input
+            className="publish-title"
+            placeholder="任务标题"
+            value={editTitle}
+            autoFocus
+            onChange={(e) => setEditTitle(e.target.value)}
+          />
+          <TagPicker
+            selectedIds={editTags}
+            allTags={tags}
+            onChange={setEditTags}
+            onGoToTags={onGoToTags}
+          />
+          <div className="publish-body">
+            <MarkdownEditor
+              value={editBody}
+              onChange={setEditBody}
+              attachFolder="publish"
+              onStatus={onStatus}
+            />
+          </div>
+          <div className="publish-actions">
+            <button className="publish-btn" onClick={saveEdit}>
+              保存
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

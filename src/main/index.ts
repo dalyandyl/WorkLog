@@ -1,0 +1,550 @@
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
+import { promises as fs } from 'fs'
+import path from 'path'
+import { pathToFileURL } from 'url'
+import { autoUpdater } from 'electron-updater'
+import { getStorageRoot } from './storage'
+import { readSettings, writeSettings, isRest, setRest } from './meta'
+import {
+  createTask,
+  deleteTask,
+  listDatesWithTasks,
+  publishTasks,
+  readTasks,
+  readTasksMany,
+  reorderTasks,
+  restoreTasksToDays,
+  updateTask,
+  type NewTaskInput,
+  type Task
+} from './tasks'
+import { createTag, deleteTag, listTags, recolorTag, renameTag } from './tags'
+import {
+  createProject,
+  deleteProject,
+  listProjects,
+  recolorProject,
+  renameProject
+} from './projects'
+import {
+  addTrashItem,
+  clearTrash,
+  listTrash,
+  removeTrashItem,
+  takeTrashItem
+} from './trash'
+import {
+  getWeekInfoByKey,
+  readWeeklySummary,
+  shiftWeekKey,
+  writeWeeklySummary
+} from './weekly'
+import { searchTasks } from './search'
+import { rangeStats } from './stats'
+import { webdavPull, webdavPush } from './sync'
+import { addPublishRecord, deletePublishRecord, readPublishRecords } from './history'
+import { buildDayMarkdown, buildRangeMarkdown, buildWeekMarkdown } from './exporter'
+import { exportBackup, importBackup } from './backup'
+import { createTray, startReminder } from './tray'
+import {
+  attachmentUrlToPath,
+  importAttachmentFile,
+  saveAttachmentBuffer
+} from './attachments'
+
+// 关闭 Chromium 光标所在行的高亮（编辑器中出现黄框高亮一行的问题）
+app.commandLine.appendSwitch('disable-features', 'CaretLineHighlight')
+
+// 自定义协议：用于在界面中显示/打开本地附件，须在 app ready 前注册
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'wlattach',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
+
+let isQuitting = false
+
+// 自动更新：后台下载，退出时安装
+autoUpdater.autoDownload = true
+autoUpdater.autoInstallOnAppQuit = true
+
+function broadcastUpdate(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('update:event', { channel, payload })
+  }
+}
+
+function registerUpdaterEvents(): void {
+  autoUpdater.on('checking-for-update', () => broadcastUpdate('checking', {}))
+  autoUpdater.on('update-available', (info) => broadcastUpdate('available', { version: info.version }))
+  autoUpdater.on('update-not-available', () => broadcastUpdate('not-available', {}))
+  autoUpdater.on('download-progress', (p) =>
+    broadcastUpdate('progress', {
+      percent: Math.round(p.percent),
+      transferred: p.transferred,
+      total: p.total,
+      bytesPerSecond: p.bytesPerSecond
+    })
+  )
+  autoUpdater.on('update-downloaded', (info) => broadcastUpdate('downloaded', { version: info.version }))
+  autoUpdater.on('error', (err) => broadcastUpdate('error', { message: err?.message ?? String(err) }))
+}
+
+function appIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(app.getAppPath(), 'build', 'icon.png')
+}
+
+function createWindow(): void {
+  const mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 960,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    title: '日志工具',
+    icon: appIconPath(),
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      disableBlinkFeatures: 'CaretLineHighlight'
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+  })
+
+  // 关闭窗口 = 最小化到托盘，保持提醒可用；真正退出走托盘菜单
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
+  // 外部链接用系统浏览器打开
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (!app.isPackaged && devUrl) {
+    mainWindow.loadURL(devUrl)
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+}
+
+function showWindow(): void {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    win.show()
+    win.focus()
+  } else {
+    createWindow()
+  }
+}
+
+interface ExportOptions {
+  mode: 'day' | 'week' | 'range'
+  date?: string
+  weekKey?: string
+  start?: string
+  end?: string
+  projectId?: string
+}
+
+app.whenReady().then(() => {
+  app.setAppUserModelId('com.worklog.app')
+
+  // 日志存储根目录：打包后 = 安装目录/logs；开发中 = 项目目录/logs
+  const storageRoot = getStorageRoot()
+
+  // 服务附件：wlattach://attachments/<folder>/<file> -> 磁盘文件
+  protocol.handle('wlattach', (request) => {
+    const filePath = attachmentUrlToPath(storageRoot, request.url)
+    if (!filePath) return new Response('forbidden', { status: 403 })
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+
+  // ---- 任务 ----
+  ipcMain.handle('storage:root', () => storageRoot)
+  ipcMain.handle('tasks:read', (_event, date: string) => readTasks(storageRoot, date))
+  ipcMain.handle('tasks:readMany', (_event, dates: string[]) =>
+    readTasksMany(storageRoot, dates)
+  )
+  ipcMain.handle('tasks:listDates', () => listDatesWithTasks(storageRoot))
+  ipcMain.handle('tasks:create', (_event, date: string, input: NewTaskInput) =>
+    createTask(storageRoot, date, input)
+  )
+  ipcMain.handle(
+    'tasks:update',
+    (_event, date: string, taskId: string, patch: Partial<Task>) =>
+      updateTask(storageRoot, date, taskId, patch)
+  )
+  ipcMain.handle('tasks:delete', (_event, date: string, taskId: string) =>
+    deleteTask(storageRoot, date, taskId)
+  )
+  ipcMain.handle('tasks:reorder', (_event, date: string, orderedIds: string[]) =>
+    reorderTasks(storageRoot, date, orderedIds)
+  )
+  ipcMain.handle(
+    'tasks:publish',
+    async (_event, dates: string[], projectIds: string[], input: NewTaskInput) => {
+      const r = await publishTasks(storageRoot, dates, projectIds, input)
+      // 记录发布历史（含实例定位，用于整批回收）
+      await addPublishRecord(storageRoot, {
+        id: crypto.randomUUID(),
+        title: input.title.trim() || '未命名任务',
+        tags: [...input.tags],
+        projectIds: [...projectIds],
+        dates: [...dates],
+        body: input.body,
+        subtasks: input.subtasks ?? [],
+        publishedAt: new Date().toISOString(),
+        instances: r.instances
+      })
+      return r
+    }
+  )
+
+  // ---- 标签库 ----
+  ipcMain.handle('tags:list', () => listTags(storageRoot))
+  ipcMain.handle('tags:create', (_event, name: string, color: string) =>
+    createTag(storageRoot, name, color)
+  )
+  ipcMain.handle('tags:rename', (_event, id: string, name: string) =>
+    renameTag(storageRoot, id, name)
+  )
+  ipcMain.handle('tags:recolor', (_event, id: string, color: string) =>
+    recolorTag(storageRoot, id, color)
+  )
+  ipcMain.handle('tags:delete', (_event, id: string) => deleteTag(storageRoot, id))
+
+  // ---- 项目 ----
+  ipcMain.handle('projects:list', () => listProjects(storageRoot))
+  ipcMain.handle('projects:create', (_event, name: string, color: string) =>
+    createProject(storageRoot, name, color)
+  )
+  ipcMain.handle('projects:rename', (_event, id: string, name: string) =>
+    renameProject(storageRoot, id, name)
+  )
+  ipcMain.handle('projects:recolor', (_event, id: string, color: string) =>
+    recolorProject(storageRoot, id, color)
+  )
+  ipcMain.handle('projects:delete', (_event, id: string) =>
+    deleteProject(storageRoot, id)
+  )
+
+  // ---- 回收站 ----
+  ipcMain.handle('trash:list', () => listTrash(storageRoot))
+  ipcMain.handle('trash:clear', async () => {
+    await clearTrash(storageRoot)
+    return { ok: true }
+  })
+  ipcMain.handle('trash:remove', (_event, id: string) => removeTrashItem(storageRoot, id))
+  ipcMain.handle('trash:restore', async (_event, id: string) => {
+    const item = await takeTrashItem(storageRoot, id)
+    if (!item) return { ok: false }
+    await restoreTasksToDays(
+      storageRoot,
+      item.tasks.map((t) => ({ date: t.date, task: t.task }))
+    )
+    return { ok: true }
+  })
+
+  // ---- 删除发布历史：整批任务进回收站 ----
+  ipcMain.handle('history:trash', async (_event, id: string) => {
+    const records = await readPublishRecords(storageRoot)
+    const rec = records.find((r) => r.id === id)
+    if (!rec) return { ok: false }
+    const trashedTasks: { date: string; projectId: string; task: Task }[] = []
+    for (const inst of rec.instances ?? []) {
+      const tasks = await readTasks(storageRoot, inst.date)
+      const task = tasks.find((t) => t.id === inst.taskId)
+      if (task) {
+        trashedTasks.push({ date: inst.date, projectId: inst.projectId, task })
+        await deleteTask(storageRoot, inst.date, inst.taskId)
+      }
+    }
+    if (trashedTasks.length > 0) {
+      await addTrashItem(storageRoot, {
+        id: crypto.randomUUID(),
+        title: rec.title,
+        projectIds: [...rec.projectIds],
+        deletedAt: new Date().toISOString(),
+        tasks: trashedTasks
+      })
+    }
+    await deletePublishRecord(storageRoot, id)
+    return { ok: true }
+  })
+
+  // ---- 周报 ----
+  ipcMain.handle('weekly:info', (_event, weekKey: string) => getWeekInfoByKey(weekKey))
+  ipcMain.handle('weekly:read', (_event, weekKey: string, projectId: string) =>
+    readWeeklySummary(storageRoot, weekKey, projectId)
+  )
+  ipcMain.handle(
+    'weekly:write',
+    (_event, weekKey: string, projectId: string, summary: string) =>
+      writeWeeklySummary(storageRoot, weekKey, projectId, summary)
+  )
+  ipcMain.handle('weekly:shift', (_event, weekKey: string, delta: number) =>
+    shiftWeekKey(weekKey, delta)
+  )
+
+  // ---- 休息日 / 设置 ----
+  ipcMain.handle('rest:get', (_event, date: string) => isRest(storageRoot, date))
+  ipcMain.handle('rest:set', (_event, date: string, rest: boolean) =>
+    setRest(storageRoot, date, rest)
+  )
+  ipcMain.handle('settings:get', () => readSettings(storageRoot))
+  ipcMain.handle('settings:set', (_event, s) => writeSettings(storageRoot, s))
+
+  // ---- 搜索 / 统计 ----
+  ipcMain.handle('search:tasks', (_event, query: string, projectId?: string) =>
+    searchTasks(storageRoot, query, projectId)
+  )
+  ipcMain.handle('stats:range', (_event, start: string, end: string, projectId?: string) =>
+    rangeStats(storageRoot, start, end, projectId)
+  )
+
+  // ---- 发布历史 ----
+  ipcMain.handle('history:list', () => readPublishRecords(storageRoot))
+  ipcMain.handle('history:delete', (_event, id: string) =>
+    deletePublishRecord(storageRoot, id)
+  )
+
+  // ---- 法定节假日（按年拉取，timor.tech 官方数据） ----
+  ipcMain.handle('holiday:fetch', async (_event, year: number) => {
+    try {
+      const res = await net.fetch(`https://timor.tech/api/holiday/year/${year}`)
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+      const json = (await res.json()) as {
+        code?: number
+        holiday?: Record<string, { holiday: boolean; name: string; date: string }>
+      }
+      if (json?.code !== 0) return { ok: false, error: '接口返回异常' }
+      const holiday: Record<string, string> = {}
+      const workday: Record<string, string> = {}
+      for (const [mmdd, item] of Object.entries(json.holiday ?? {})) {
+        const date = item.date || `${year}-${mmdd}`
+        if (item.holiday) holiday[date] = item.name
+        else workday[date] = item.name
+      }
+      return { ok: true, holiday, workday }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  // ---- 附件 ----
+  ipcMain.handle(
+    'attach:saveImage',
+    (_event, folder: string, name: string, buf: ArrayBuffer) =>
+      saveAttachmentBuffer(storageRoot, folder, name, buf)
+  )
+  ipcMain.handle('attach:pickFile', async (_event, folder: string) => {
+    try {
+      const options: Electron.OpenDialogOptions = {
+        title: '选择附件',
+        properties: ['openFile', 'multiSelections']
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+      if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true }
+      const files: { url: string; name: string }[] = []
+      for (const srcPath of res.filePaths) {
+        const { url } = await importAttachmentFile(storageRoot, folder, srcPath)
+        files.push({ url, name: path.basename(srcPath) })
+      }
+      return { ok: true, files }
+    } catch (err) {
+      console.error('attach:pickFile failed:', err)
+      return { ok: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('attach:open', async (_event, url: string) => {
+    const filePath = attachmentUrlToPath(storageRoot, url)
+    if (!filePath) return { ok: false, error: '附件路径无效' }
+    const err = await shell.openPath(filePath)
+    return err ? { ok: false, error: err } : { ok: true }
+  })
+
+  // ---- 导出 Markdown ----
+  ipcMain.handle('export:md', async (_event, opts: ExportOptions) => {
+    try {
+      let content = ''
+      let defaultName = '日志.md'
+
+      if (opts.mode === 'day' && opts.date) {
+        content = await buildDayMarkdown(storageRoot, opts.date, opts.projectId)
+        defaultName = `${opts.date}.md`
+      } else if (opts.mode === 'week' && opts.weekKey) {
+        content = await buildWeekMarkdown(storageRoot, opts.weekKey, opts.projectId ?? '')
+        defaultName = `周报-${opts.weekKey}.md`
+      } else if (opts.mode === 'range' && opts.start && opts.end) {
+        content = await buildRangeMarkdown(storageRoot, opts.start, opts.end, opts.projectId)
+        defaultName = `日志-${opts.start}_${opts.end}.md`
+      } else {
+        return { ok: false, error: '导出参数不完整' }
+      }
+
+      const options: Electron.SaveDialogOptions = {
+        title: '导出 Markdown',
+        defaultPath: defaultName,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+
+      await fs.writeFile(res.filePath, content, 'utf-8')
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      console.error('export:md failed:', err)
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  // ---- 备份 ----
+  ipcMain.handle('backup:export', async () => {
+    try {
+      const d = new Date()
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const options: Electron.SaveDialogOptions = {
+        title: '导出备份',
+        defaultPath: `日志工具备份-${stamp}.zip`,
+        filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }]
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+      await exportBackup(storageRoot, res.filePath)
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      console.error('backup:export failed:', err)
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('backup:import', async () => {
+    try {
+      const options: Electron.OpenDialogOptions = {
+        title: '导入备份',
+        filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }],
+        properties: ['openFile']
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+      if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true }
+      await importBackup(storageRoot, res.filePaths[0])
+      return { ok: true }
+    } catch (err) {
+      console.error('backup:import failed:', err)
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  createTray(showWindow)
+  startReminder(storageRoot)
+  createWindow()
+
+  // ---- 自动更新 ----
+  registerUpdaterEvents()
+  ipcMain.handle('app:getInfo', () => ({
+    appVersion: app.getVersion(),
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+    platform: process.platform,
+    arch: process.arch,
+    packaged: app.isPackaged
+  }))
+  ipcMain.handle('update:check', async () => {
+    if (!app.isPackaged) {
+      return { ok: false, message: '开发模式下无法检查更新，请使用打包后的安装程序' }
+    }
+    try {
+      await autoUpdater.checkForUpdates()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  ipcMain.handle('update:install', () => {
+    autoUpdater.quitAndInstall()
+    return { ok: true }
+  })
+
+  // ---- WebDAV 跨设备同步 ----
+  ipcMain.handle('sync:push', async () => {
+    const s = await readSettings(storageRoot)
+    if (!s.webdav.url || !s.webdav.username) {
+      return { ok: false, error: '请先在设置中配置 WebDAV（地址 / 账号 / 密码）' }
+    }
+    return webdavPush(storageRoot, s.webdav)
+  })
+  ipcMain.handle('sync:pull', async () => {
+    const s = await readSettings(storageRoot)
+    if (!s.webdav.url || !s.webdav.username) {
+      return { ok: false, error: '请先在设置中配置 WebDAV（地址 / 账号 / 密码）' }
+    }
+    return webdavPull(storageRoot, s.webdav)
+  })
+
+  // ---- 报表导出（MD / Word） ----
+  ipcMain.handle('report:exportMd', async (_event, md: string, defaultName: string) => {
+    try {
+      const options: Electron.SaveDialogOptions = {
+        title: '导出报表',
+        defaultPath: `${defaultName}.md`,
+        filters: [{ name: 'Markdown 文件', extensions: ['md'] }]
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+      await fs.writeFile(res.filePath, md, 'utf-8')
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  // Word 导出：以 HTML 内容保存为 .doc（Word/WPS 可直接打开）
+  ipcMain.handle('report:exportWord', async (_event, html: string, defaultName: string) => {
+    try {
+      const options: Electron.SaveDialogOptions = {
+        title: '导出报表',
+        defaultPath: `${defaultName}.doc`,
+        filters: [{ name: 'Word 文档', extensions: ['doc'] }]
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+      await fs.writeFile(res.filePath, html, 'utf-8')
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
