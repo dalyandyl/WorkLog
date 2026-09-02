@@ -202,8 +202,8 @@ function PendingTaskCard({
   onGoToTags: () => void
   onStatus: (msg: string) => void
 }) {
-  const [showSubtasks, setShowSubtasks] = useState(false)
-  const [showBody, setShowBody] = useState(false)
+  const [showSubtasks, setShowSubtasks] = useState(true)
+  const [showBody, setShowBody] = useState(true)
 
   return (
     <div className="pending-card">
@@ -302,6 +302,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   // 已发布任务列表
   const [pubTab, setPubTab] = useState<'history' | 'published'>('published')
   const [published, setPublished] = useState<{ date: string; task: Task }[]>([])
+  const [viewEntry, setViewEntry] = useState<{ date: string; task: Task } | null>(null)
   const [editingTask, setEditingTask] = useState<{ date: string; task: Task } | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editBody, setEditBody] = useState('')
@@ -520,7 +521,12 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
             <div className="task-empty">暂无已发布任务</div>
           ) : (
             published.map((entry) => (
-              <div key={entry.task.id + entry.date} className={'publish-record' + (entry.task.done ? ' done' : '')}>
+              <div
+                key={entry.task.id + entry.date}
+                className={'publish-record' + (entry.task.done ? ' done' : '')}
+                onClick={() => setViewEntry(entry)}
+                title="点击查看详情"
+              >
                 <div className="publish-record-main">
                   <span className="publish-record-title">{entry.task.title || '（未命名）'}</span>
                   <span className="publish-record-meta">
@@ -640,7 +646,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         </div>
       )}
 
-      <Modal open={showForm} title="发布任务（支持批量）" width={900} onClose={closeForm}>
+      <Modal open={showForm} title="发布任务（支持批量）" width={1080} onClose={closeForm}>
         <div className="publish-form">
           <div className="pending-list">
             {pending.map((p) => (
@@ -756,7 +762,98 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         )}
       </Drawer>
 
-      <Modal open={editingTask !== null} title="编辑任务" width={760} onClose={() => setEditingTask(null)}>
+      <Drawer open={viewEntry !== null} title="已发布任务详情" onClose={() => setViewEntry(null)}>
+        {viewEntry && (
+          <div className="publish-detail">
+            <h3 className="publish-detail-title">{viewEntry.task.title || '未命名任务'}</h3>
+            <div className="task-time-info">
+              <span>📅 派发：{new Date(viewEntry.task.publishedAt).toLocaleString()}</span>
+              {viewEntry.task.completedAt && (
+                <span>✅ 完成：{new Date(viewEntry.task.completedAt).toLocaleString()}</span>
+              )}
+            </div>
+            <div className="tag-chips">
+              {viewEntry.task.tags.map((id) => {
+                const t = tagById.get(id)
+                if (!t) return null
+                return (
+                  <span
+                    key={id}
+                    className="task-item-tag"
+                    style={{ borderColor: t.color, color: t.color }}
+                  >
+                    {t.name}
+                  </span>
+                )
+              })}
+              {viewEntry.task.tags.length === 0 && <span className="muted">（无标签）</span>}
+            </div>
+            <div className="detail-instances-label">操作：</div>
+            <div className="publish-record-actions">
+              <button
+                className="ghost-btn"
+                onClick={() => {
+                  const entry = viewEntry
+                  setViewEntry(null)
+                  openEdit(entry)
+                }}
+                title="编辑任务（所有天同步）"
+              >
+                ✏️ 编辑
+              </button>
+              <button
+                className="icon-btn danger"
+                onClick={() => {
+                  const entry = viewEntry
+                  setViewEntry(null)
+                  void deleteInstance(entry.date, entry.task)
+                }}
+                title="删除任务（进回收站）"
+              >
+                🗑 删除
+              </button>
+            </div>
+            {(viewEntry.task.subtasks ?? []).length > 0 && (
+              <div className="subtask-list read">
+                {(viewEntry.task.subtasks ?? []).map((st) => (
+                  <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
+                    <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+                    <span className="subtask-title">{st.title}</span>
+                    <span className="subtask-tags">
+                      {st.tags.map((id) => {
+                        const t = tagById.get(id)
+                        if (!t) return null
+                        return (
+                          <span
+                            key={id}
+                            className="task-item-tag"
+                            style={{ borderColor: t.color, color: t.color }}
+                          >
+                            {t.name}
+                          </span>
+                        )
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {viewEntry.task.note && viewEntry.task.note.trim() && (
+              <div className="task-note">
+                <div className="task-note-label">📝 备注</div>
+                <div className="task-note-view">{viewEntry.task.note}</div>
+              </div>
+            )}
+            {viewEntry.task.body ? (
+              <RichView content={viewEntry.task.body} />
+            ) : (
+              <div className="task-empty">暂无正文</div>
+            )}
+          </div>
+        )}
+      </Drawer>
+
+      <Modal open={editingTask !== null} title="编辑任务" width={900} onClose={() => setEditingTask(null)}>
         <div className="publish-form">
           <input
             className="publish-title"

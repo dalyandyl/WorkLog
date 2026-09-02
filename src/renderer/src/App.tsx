@@ -86,14 +86,14 @@ export default function App() {
       <header className="topbar">
         <div className="brand">📔 日志工具</div>
         <div className="mode-switch">
-          <button className={mode === 'publish' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('publish')}>
-            任务发布
-          </button>
           <button className={mode === 'day' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('day')}>
             日报
           </button>
           <button className={mode === 'week' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('week')}>
             周报
+          </button>
+          <button className={mode === 'publish' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('publish')}>
+            任务发布
           </button>
           <button className={mode === 'stats' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('stats')}>
             统计
