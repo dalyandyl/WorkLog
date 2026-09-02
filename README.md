@@ -108,9 +108,8 @@ worklog/
 │   │   └── tray.ts      # 托盘 + 每日提醒
 │   ├── preload/         # 安全桥接层
 │   └── renderer/src/
-│       ├── App.tsx              # 顶部导航 + 侧边工具栏
+│       ├── App.tsx              # 顶部功能栏（发布/日报/周报/统计/报表/标签/回收站）+ 左侧菜单（日历/设置）
 │       └── components/
-│           ├── WorkView.tsx     # 日报/周报切换容器
 │           ├── DayView.tsx      # 日报（卡片任务列表 + 详情两态 + 备注）
 │           ├── TaskDetail.tsx   # 任务详情（只读 + 备注编辑）
 │           ├── TaskPublish.tsx  # 任务发布（批量待发布列表）+ 发布历史

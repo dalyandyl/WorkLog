@@ -6,13 +6,14 @@ import TagManager from './components/TagManager'
 import TaskPublish from './components/TaskPublish'
 import TrashView from './components/TrashView'
 import ReportView from './components/ReportView'
-import WorkView from './components/WorkView'
+import DayView from './components/DayView'
+import WeeklyView from './components/WeeklyView'
 import SettingsModal from './components/SettingsModal'
 import Modal from './components/Modal'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'day' | 'stats' | 'report'
+type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report'
 
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
@@ -92,13 +93,23 @@ export default function App() {
             任务发布
           </button>
           <button className={mode === 'day' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('day')}>
-            日报 / 周报
+            日报
+          </button>
+          <button className={mode === 'week' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('week')}>
+            周报
           </button>
           <button className={mode === 'stats' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('stats')}>
             统计
           </button>
           <button className={mode === 'report' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('report')}>
             报表
+          </button>
+          <span className="mode-divider" />
+          <button className="mode-btn" onClick={() => setTagsOpen(true)} title="标签管理（全局）">
+            🏷 标签
+          </button>
+          <button className="mode-btn" onClick={() => setTrashOpen(true)} title="临时回收站（全局）">
+            🗑 回收站
           </button>
         </div>
         <div className="topbar-right">
@@ -109,16 +120,12 @@ export default function App() {
 
       <div className="body">
         <aside className="sidebar">
-          <div className="sidebar-bottom">
-            <button className="sidebar-tool-btn" onClick={() => setTagsOpen(true)} title="标签管理（全局）">
-              🏷 标签
-            </button>
-            <button className="sidebar-tool-btn" onClick={() => setTrashOpen(true)} title="临时回收站（全局）">
-              🗑 回收站
-            </button>
+          <div className="sidebar-top">
             <button className="sidebar-tool-btn" onClick={() => setCalOpen((v) => !v)} title="展开日历">
               📅 日历
             </button>
+          </div>
+          <div className="sidebar-bottom">
             <button className="sidebar-tool-btn" onClick={() => setSettingsOpen(true)} title="设置">
               ⚙️ 设置
             </button>
@@ -136,15 +143,23 @@ export default function App() {
           )}
 
           {mode === 'day' && (
-            <WorkView
-              tags={tags}
+            <DayView
               date={date}
-              weekKey={weekKey}
-              daySel={daySel}
-              onDateChange={selectDate}
-              onWeekChange={setWeekKey}
+              tags={tags}
+              selectedTaskId={daySel.date === date ? daySel.taskId : null}
               onSelectTask={(id) => setDaySel({ date, taskId: id })}
+              onDateChange={selectDate}
               onTasksChanged={refreshTaskDates}
+              onStatus={setStatus}
+              onGoToTags={() => setTagsOpen(true)}
+            />
+          )}
+
+          {mode === 'week' && (
+            <WeeklyView
+              weekKey={weekKey}
+              tags={tags}
+              onWeekChange={setWeekKey}
               onStatus={setStatus}
             />
           )}
@@ -157,7 +172,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* 标签 / 回收站弹窗（全局功能，不占主界面） */}
+      {/* 标签 / 回收站弹窗（全局功能，从顶部功能栏打开） */}
       <Modal open={tagsOpen} title="标签管理" width={860} onClose={() => setTagsOpen(false)}>
         <div className="modal-panel-scroll">
           <TagManager tags={tags} onChanged={refreshTags} onStatus={setStatus} />
@@ -169,7 +184,7 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* 日历浮层（向上展开） */}
+      {/* 日历浮层（左侧菜单栏顶部打开，向上展开） */}
       {calOpen && (
         <div className="calendar-pop">
           <Calendar selected={date} markers={taskDates} onSelect={(d) => { selectDate(d); }} />

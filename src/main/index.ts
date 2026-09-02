@@ -49,6 +49,9 @@ import {
 
 // 关闭 Chromium 光标所在行的高亮（编辑器中出现黄框高亮一行的问题）
 app.commandLine.appendSwitch('disable-features', 'CaretLineHighlight')
+// 禁用 GPU 着色器磁盘缓存与 HTTP 磁盘缓存：避免缓存目录无法移动/创建时报错（0x5 拒绝访问）
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+app.commandLine.appendSwitch('disk-cache-size', '0')
 
 // 自定义协议：用于在界面中显示/打开本地附件，须在 app ready 前注册
 protocol.registerSchemesAsPrivileged([
