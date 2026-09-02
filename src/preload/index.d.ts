@@ -23,6 +23,7 @@ export interface WorkLogApi {
   createTask(date: string, input: NewTaskInput): Promise<Task>
   updateTask(date: string, taskId: string, patch: TaskPatch): Promise<Task | null>
   deleteTask(date: string, taskId: string): Promise<{ ok: boolean }>
+  trashTask(date: string, taskId: string): Promise<{ ok: boolean }>
   reorderTasks(date: string, orderedIds: string[]): Promise<void>
   publishTasks(
     dates: string[],

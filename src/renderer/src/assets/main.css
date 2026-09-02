@@ -1259,6 +1259,58 @@ body {
   max-width: 860px;
 }
 
+/* 批量派发：待发布列表 */
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 52vh;
+  padding-right: 4px;
+}
+
+.pending-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pending-toggles {
+  display: flex;
+  gap: 8px;
+}
+
+.pending-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 4px;
+}
+
+/* 发布历史详情：任务实例列表 */
+.detail-instances {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.detail-instances-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .publish-title {
   font-size: 16px;
   font-weight: 600;

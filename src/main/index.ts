@@ -184,6 +184,25 @@ app.whenReady().then(() => {
   ipcMain.handle('tasks:delete', (_event, date: string, taskId: string) =>
     deleteTask(storageRoot, date, taskId)
   )
+  // ---- 删除单个已发布任务：进回收站（含区间共享任务的所有日期） ----
+  ipcMain.handle('tasks:trash', async (_event, date: string, taskId: string) => {
+    const dates = await datesOfTask(storageRoot, taskId)
+    const trashedTasks: { date: string; task: Task }[] = []
+    for (const d of dates) {
+      const tasks = await readTasks(storageRoot, d)
+      const task = tasks.find((t) => t.id === taskId)
+      if (task) trashedTasks.push({ date: d, task })
+    }
+    if (trashedTasks.length === 0) return { ok: false }
+    await addTrashItem(storageRoot, {
+      id: crypto.randomUUID(),
+      title: trashedTasks[0].task.title || '未命名任务',
+      deletedAt: new Date().toISOString(),
+      tasks: trashedTasks
+    })
+    await deleteTask(storageRoot, date, taskId)
+    return { ok: true }
+  })
   ipcMain.handle('tasks:reorder', (_event, date: string, orderedIds: string[]) =>
     reorderTasks(storageRoot, date, orderedIds)
   )

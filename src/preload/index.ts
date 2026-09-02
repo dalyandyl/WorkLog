@@ -28,6 +28,8 @@ const api = {
     ipcRenderer.invoke('tasks:update', date, taskId, patch),
   deleteTask: (date: string, taskId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('tasks:delete', date, taskId),
+  trashTask: (date: string, taskId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('tasks:trash', date, taskId),
   reorderTasks: (date: string, orderedIds: string[]): Promise<void> =>
     ipcRenderer.invoke('tasks:reorder', date, orderedIds),
   publishTasks: (
