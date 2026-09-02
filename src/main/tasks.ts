@@ -82,14 +82,15 @@ export async function updateTask(
   taskId: string,
   patch: Partial<Pick<Task, 'title' | 'tags' | 'done' | 'body' | 'subtasks' | 'completedAt'>>
 ): Promise<Task | null> {
-  const tasks = await readTasks(root, date)
-  const task = tasks.find((t) => t.id === taskId)
+  // 以指定日期上的任务为基准应用补丁
+  const baseTasks = await readTasks(root, date)
+  const task = baseTasks.find((t) => t.id === taskId)
   if (!task) return null
   if (patch.title !== undefined) task.title = patch.title.trim()
   if (patch.tags !== undefined) task.tags = [...patch.tags]
   if (patch.done !== undefined) {
     task.done = patch.done
-    // 勾选完成时记录完成时间；取消完成时清空
+    // 勾选完成时记录完成时间（勾选时刻）；取消完成时清空
     if (patch.done) task.completedAt = new Date().toISOString()
     else task.completedAt = null
   }
@@ -97,8 +98,30 @@ export async function updateTask(
   if (patch.subtasks !== undefined) task.subtasks = patch.subtasks
   if (patch.completedAt !== undefined) task.completedAt = patch.completedAt
   task.updatedAt = new Date().toISOString()
-  await writeTasks(root, date, tasks)
+
+  // 区间派发的任务同一 id 共享多天：同步更新所有包含该 id 的日期
+  const targetDates = await datesOfTask(root, taskId)
+  for (const d of targetDates) {
+    const tasks = await readTasks(root, d)
+    const idx = tasks.findIndex((t) => t.id === taskId)
+    if (idx !== -1) {
+      // 保留各天原有的 order（排序是当天独立的）
+      tasks[idx] = { ...task, order: tasks[idx].order }
+      await writeTasks(root, d, tasks)
+    }
+  }
   return task
+}
+
+/** 找出所有包含指定任务 id 的日期（区间共享任务会出现在多天） */
+export async function datesOfTask(root: string, taskId: string): Promise<string[]> {
+  const dates = await listDatesWithTasks(root)
+  const result: string[] = []
+  for (const d of dates) {
+    const tasks = await readTasks(root, d)
+    if (tasks.some((t) => t.id === taskId)) result.push(d)
+  }
+  return result
 }
 
 export async function deleteTask(
@@ -106,11 +129,18 @@ export async function deleteTask(
   date: string,
   taskId: string
 ): Promise<{ ok: boolean }> {
-  const tasks = await readTasks(root, date)
-  const next = tasks.filter((t) => t.id !== taskId)
-  if (next.length === tasks.length) return { ok: false }
-  await writeTasks(root, date, next)
-  return { ok: true }
+  // 从所有包含该 id 的日期中删除（共享任务）
+  const dates = await datesOfTask(root, taskId)
+  let found = false
+  for (const d of dates) {
+    const tasks = await readTasks(root, d)
+    const next = tasks.filter((t) => t.id !== taskId)
+    if (next.length !== tasks.length) {
+      found = true
+      await writeTasks(root, d, next)
+    }
+  }
+  return { ok: found }
 }
 
 /** 按界面给出的可见顺序重排 order（未完成在上、已完成在下的顺序） */
@@ -164,20 +194,43 @@ export async function readTasksMany(
   return result
 }
 
-/** 任务发布：把任务复制到所选日期（区间发布时同批次同任务 id，见 publishTasks 共享实现） */
+/**
+ * 任务发布：区间派发时同一任务 id 写入所选每个日期（共享状态）。
+ * 任一日期勾选完成 / 编辑 / 备注都会通过 updateTask 同步到所有天。
+ */
 export async function publishTasks(
   root: string,
   dates: string[],
   input: NewTaskInput
 ): Promise<{ count: number; instances: { date: string; taskId: string }[] }> {
-  let count = 0
+  const taskId = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const task: Task = {
+    id: taskId,
+    title: input.title.trim(),
+    tags: [...(input.tags ?? [])],
+    done: false,
+    body: input.body ?? '',
+    subtasks: (input.subtasks ?? []).map((s) => ({
+      id: s.id || crypto.randomUUID(),
+      title: s.title,
+      done: !!s.done,
+      tags: [...(s.tags ?? [])]
+    })),
+    publishedAt: now,
+    completedAt: null,
+    order: 0,
+    createdAt: now,
+    updatedAt: now
+  }
   const instances: { date: string; taskId: string }[] = []
   for (const d of dates) {
-    const task = await createTask(root, d, { ...input })
-    instances.push({ date: d, taskId: task.id })
-    count++
+    const tasks = await readTasks(root, d)
+    const maxOrder = tasks.reduce((m, t) => Math.max(m, t.order), -1)
+    await writeTasks(root, d, [...tasks, { ...task, order: maxOrder + 1 }])
+    instances.push({ date: d, taskId })
   }
-  return { count, instances }
+  return { count: instances.length, instances }
 }
 
 /** 恢复回收站任务实例到各自日期 */

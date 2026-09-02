@@ -7,6 +7,7 @@ import { getStorageRoot } from './storage'
 import { readSettings, writeSettings, isRest, setRest } from './meta'
 import {
   createTask,
+  datesOfTask,
   deleteTask,
   listDatesWithTasks,
   publishTasks,
@@ -240,13 +241,17 @@ app.whenReady().then(() => {
     const records = await readPublishRecords(storageRoot)
     const rec = records.find((r) => r.id === id)
     if (!rec) return { ok: false }
+    // 区间共享任务同一 id 跨多天：先按唯一任务 id 收集所有日期的实例，再删除
     const trashedTasks: { date: string; task: Task }[] = []
+    const seenTaskIds = new Set<string>()
     for (const inst of rec.instances ?? []) {
-      const tasks = await readTasks(storageRoot, inst.date)
-      const task = tasks.find((t) => t.id === inst.taskId)
-      if (task) {
-        trashedTasks.push({ date: inst.date, task })
-        await deleteTask(storageRoot, inst.date, inst.taskId)
+      if (seenTaskIds.has(inst.taskId)) continue
+      seenTaskIds.add(inst.taskId)
+      const dates = await datesOfTask(storageRoot, inst.taskId)
+      for (const d of dates) {
+        const tasks = await readTasks(storageRoot, d)
+        const task = tasks.find((t) => t.id === inst.taskId)
+        if (task) trashedTasks.push({ date: d, task })
       }
     }
     if (trashedTasks.length > 0) {
@@ -256,6 +261,10 @@ app.whenReady().then(() => {
         deletedAt: new Date().toISOString(),
         tasks: trashedTasks
       })
+      // deleteTask 会同步删除所有包含该 id 的日期
+      for (const taskId of seenTaskIds) {
+        await deleteTask(storageRoot, trashedTasks[0].date, taskId)
+      }
     }
     await deletePublishRecord(storageRoot, id)
     return { ok: true }
