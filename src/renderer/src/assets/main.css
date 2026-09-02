@@ -72,15 +72,15 @@ body {
 }
 
 .sidebar {
-  width: 220px;
+  width: 240px;
   flex: none;
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  overflow: visible;
+  gap: 10px;
+  overflow-y: auto;
   position: relative;
 }
 
@@ -3451,11 +3451,32 @@ input {
   margin-top: auto;
 }
 
-/* 侧边栏上部（日历等） */
+/* 侧边栏上部（日历内嵌） */
 .sidebar-top {
   flex: none;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 内嵌在侧边栏的日历：紧凑化 */
+.sidebar .cal-cell {
+  height: 30px;
+  font-size: 12px;
+}
+
+.sidebar .cal-weekday {
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.sidebar .cal-head .cal-title {
+  font-size: 13px;
+}
+
+.sidebar .cal-foot-btns .today-btn {
+  font-size: 10px;
+  padding: 4px 4px;
 }
 
 .sidebar-tool-btn {
@@ -3765,7 +3786,7 @@ input {
 
 @media (max-width: 1000px) {
   .sidebar {
-    width: 180px;
+    width: 210px;
   }
   .status {
     max-width: 160px;
