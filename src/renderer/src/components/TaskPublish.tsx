@@ -646,7 +646,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         </div>
       )}
 
-      <Modal open={showForm} title="发布任务（支持批量）" width={1080} onClose={closeForm}>
+      <Modal open={showForm} title="发布任务（支持批量）" width={1080} height={680} onClose={closeForm}>
         <div className="publish-form">
           <div className="pending-list">
             {pending.map((p) => (
@@ -853,7 +853,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         )}
       </Drawer>
 
-      <Modal open={editingTask !== null} title="编辑任务" width={900} onClose={() => setEditingTask(null)}>
+      <Modal open={editingTask !== null} title="编辑任务" width={900} height={560} onClose={() => setEditingTask(null)}>
         <div className="publish-form">
           <input
             className="publish-title"

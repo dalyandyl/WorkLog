@@ -4,11 +4,12 @@ interface ModalProps {
   open: boolean
   title: string
   width?: number
+  height?: number
   onClose: () => void
   children: ReactNode
 }
 
-export default function Modal({ open, title, width = 640, onClose, children }: ModalProps) {
+export default function Modal({ open, title, width = 640, height, onClose, children }: ModalProps) {
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent): void {
@@ -22,7 +23,7 @@ export default function Modal({ open, title, width = 640, onClose, children }: M
 
   return (
     <div className="wl-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="wl-modal" style={{ width }}>
+      <div className="wl-modal" style={{ width, height }}>
         <div className="wl-modal-head">
           <h3>{title}</h3>
           <button className="wl-close" onClick={onClose} title="关闭">
