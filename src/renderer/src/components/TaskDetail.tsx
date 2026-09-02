@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { Tag, Task } from '../types'
 import RichView from './RichView'
 
@@ -7,7 +8,7 @@ interface TaskDetailProps {
   tags: Tag[]
 }
 
-/** 日报任务详情（只读）：标题 + 标签 + 子任务 + 正文 + 派发/完成时间 */
+/** 日报任务详情（只读）：标题 + 标签 + 子任务 + 正文 + 派发/完成时间 + 备注（唯一可编辑） */
 export default function TaskDetail({ task, date, tags }: TaskDetailProps) {
   return (
     <div className="task-detail">
@@ -69,6 +70,38 @@ export default function TaskDetail({ task, date, tags }: TaskDetailProps) {
           <div className="task-empty">暂无正文</div>
         )}
       </div>
+
+      <NoteEditor task={task} date={date} />
+    </div>
+  )
+}
+
+/** 日报备注：唯一可编辑项，随任务在所有天共享，失焦/防抖自动保存 */
+function NoteEditor({ task, date }: { task: Task; date: string }) {
+  const [val, setVal] = useState(task.note ?? '')
+  const timer = useRef<number | null>(null)
+
+  useEffect(() => {
+    setVal(task.note ?? '')
+  }, [task.id, task.note])
+
+  function onChange(v: string): void {
+    setVal(v)
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      void window.api.updateTask(date, task.id, { note: v })
+    }, 600)
+  }
+
+  return (
+    <div className="task-note">
+      <div className="task-note-label">📝 备注</div>
+      <textarea
+        className="task-note-input"
+        placeholder="给这个任务简单备注…（自动保存，随任务在所有天共享）"
+        value={val}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   )
 }

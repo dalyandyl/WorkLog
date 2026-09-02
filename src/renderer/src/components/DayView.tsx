@@ -148,11 +148,12 @@ export default function DayView({
                       ))}
                     </div>
                   )}
-                  {t.completedAt && (
-                    <div className="task-completed-at muted">
-                      完成于 {new Date(t.completedAt).toLocaleString()}
-                    </div>
-                  )}
+                  <div className="task-times muted">
+                    <span>📅 派发于 {new Date(t.publishedAt).toLocaleString()}</span>
+                    {t.completedAt && (
+                      <span>✅ 完成于 {new Date(t.completedAt).toLocaleString()}</span>
+                    )}
+                  </div>
                 </div>
               ))
             )}

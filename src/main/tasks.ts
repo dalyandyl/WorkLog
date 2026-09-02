@@ -22,10 +22,11 @@ export async function readTasks(root: string, date: string): Promise<Task[]> {
     const raw = await fs.readFile(dayFilePath(root, date), 'utf-8')
     const data = JSON.parse(raw)
     const rawTasks = Array.isArray(data?.tasks) ? (data.tasks as Task[]) : []
-    // 兼容旧数据：补默认子任务数组、派发/完成时间
+    // 兼容旧数据：补默认子任务数组、备注、派发/完成时间
     const tasks = rawTasks.map((t) => ({
       ...t,
       subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+      note: typeof t.note === 'string' ? t.note : '',
       publishedAt: t.publishedAt || t.createdAt || new Date().toISOString(),
       completedAt: t.completedAt ?? (t.done ? (t.updatedAt || t.createdAt) : null)
     }))
@@ -65,6 +66,7 @@ export async function createTask(
       done: !!s.done,
       tags: [...(s.tags ?? [])]
     })),
+    note: '',
     publishedAt: now,
     completedAt: null,
     order: maxOrder + 1,
@@ -80,7 +82,7 @@ export async function updateTask(
   root: string,
   date: string,
   taskId: string,
-  patch: Partial<Pick<Task, 'title' | 'tags' | 'done' | 'body' | 'subtasks' | 'completedAt'>>
+  patch: Partial<Pick<Task, 'title' | 'tags' | 'done' | 'body' | 'subtasks' | 'note' | 'completedAt'>>
 ): Promise<Task | null> {
   // 以指定日期上的任务为基准应用补丁
   const baseTasks = await readTasks(root, date)
@@ -96,6 +98,7 @@ export async function updateTask(
   }
   if (patch.body !== undefined) task.body = patch.body
   if (patch.subtasks !== undefined) task.subtasks = patch.subtasks
+  if (patch.note !== undefined) task.note = patch.note
   if (patch.completedAt !== undefined) task.completedAt = patch.completedAt
   task.updatedAt = new Date().toISOString()
 
@@ -217,6 +220,7 @@ export async function publishTasks(
       done: !!s.done,
       tags: [...(s.tags ?? [])]
     })),
+    note: '',
     publishedAt: now,
     completedAt: null,
     order: 0,

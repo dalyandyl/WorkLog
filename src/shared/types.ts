@@ -46,6 +46,7 @@ export interface Task {
   done: boolean
   body: string // 正文 Markdown
   subtasks: Subtask[]
+  note: string // 日报备注（共享，随任务）
   publishedAt: string // 派发时间（发布时刻）
   completedAt: string | null // 完成时间（勾选完成时刻，未完成 null）
   order: number
@@ -68,6 +69,7 @@ export interface TaskPatch {
   done?: boolean
   body?: string
   subtasks?: Subtask[]
+  note?: string
   completedAt?: string | null
 }
 

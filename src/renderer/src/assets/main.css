@@ -982,11 +982,11 @@ body {
 }
 
 .task-item.done {
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .task-item.done:hover {
-  opacity: 0.8;
+  opacity: 0.9;
 }
 
 .drag-handle {
@@ -1019,8 +1019,8 @@ body {
 }
 
 .task-item.done .task-title {
-  text-decoration: line-through;
   color: var(--muted);
+  text-decoration: none;
 }
 
 .task-item-tags {
@@ -1492,16 +1492,16 @@ body {
 }
 
 .weekly-day-tasks li.done {
-  opacity: 0.62;
+  opacity: 0.75;
 }
 
 .weekly-day-tasks li.done:hover {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .weekly-day-tasks li.done .weekly-task-title {
-  text-decoration: line-through;
   color: var(--muted);
+  text-decoration: none;
 }
 
 .weekly-check {
@@ -1644,8 +1644,8 @@ body {
 }
 
 .task-title-view.done {
-  text-decoration: line-through;
   color: var(--muted);
+  text-decoration: none;
 }
 
 /* ===================== 富文本编辑器（TipTap） ===================== */
@@ -2545,8 +2545,8 @@ input {
 }
 
 .task-subtask.done .task-subtask-title {
-  text-decoration: line-through;
   color: var(--muted);
+  text-decoration: none;
 }
 
 .task-subtask-tags {
@@ -2617,8 +2617,8 @@ input {
 }
 
 .subtask-row.done .subtask-title {
-  text-decoration: line-through;
   color: var(--muted);
+  text-decoration: none;
 }
 
 .subtask-check {
@@ -2706,7 +2706,8 @@ input {
 }
 
 .weekly-subtask.done .weekly-subtask-title {
-  text-decoration: line-through;
+  color: var(--muted);
+  text-decoration: none;
 }
 
 /* ===================== v3.6：关于系统 / 联网更新日历 ===================== */
@@ -3029,6 +3030,47 @@ input {
 .task-completed-at {
   font-size: 11px;
   padding-left: 30px;
+}
+
+/* 日报列表：派发/完成时间 */
+.task-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  padding-left: 30px;
+}
+
+/* 日报备注 */
+.task-note {
+  margin-top: 14px;
+}
+
+.task-note-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.task-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+}
+
+.task-note-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .weekly-task-done-at {
@@ -3564,7 +3606,7 @@ input {
 }
 
 .publish-record.done {
-  opacity: 0.6;
+  opacity: 0.72;
 }
 
 /* 自适应窗口 */
