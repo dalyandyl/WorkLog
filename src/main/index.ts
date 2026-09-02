@@ -60,9 +60,11 @@ protocol.registerSchemesAsPrivileged([
 
 let isQuitting = false
 
-// 自动更新：后台下载，退出时安装
-autoUpdater.autoDownload = true
-autoUpdater.autoInstallOnAppQuit = true
+// 自动更新：仅打包后启用（避免开发模式下因版本/网络问题抛错），后台下载，退出时安装
+if (app.isPackaged) {
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+}
 
 function broadcastUpdate(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -465,8 +467,10 @@ app.whenReady().then(async () => {
   startReminder(storageRoot)
   createWindow()
 
-  // ---- 自动更新 ----
-  registerUpdaterEvents()
+  // ---- 自动更新（仅打包后监听事件） ----
+  if (app.isPackaged) {
+    registerUpdaterEvents()
+  }
   ipcMain.handle('app:getInfo', () => ({
     appVersion: app.getVersion(),
     electron: process.versions.electron,
