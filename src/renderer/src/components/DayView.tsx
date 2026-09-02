@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { Tag, Task } from '../types'
+import type { Subtask, Tag, Task } from '../types'
 import { weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
 import DatePicker from './DatePicker'
+import Modal from './Modal'
+import TagPicker from './TagPicker'
+import MarkdownEditor from './MarkdownEditor'
+import SubtaskEditor from './SubtaskEditor'
 
 interface DayViewProps {
   date: string
@@ -28,17 +32,31 @@ export default function DayView({
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRest, setIsRest] = useState(false)
 
+  // 编辑态
+  const [editing, setEditing] = useState<Task | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editBody, setEditBody] = useState('')
+  const [editTags, setEditTags] = useState<string[]>([])
+  const [editSubtasks, setEditSubtasks] = useState<Subtask[]>([])
+
   const tagMap = new Map(tags.map((t) => [t.id, t]))
+
+  async function loadTasks(): Promise<void> {
+    const all = await window.api.readTasks(date)
+    setTasks(all)
+    if (!all.some((t) => t.id === selectedTaskId)) {
+      onSelectTask(all.length > 0 ? all[0].id : null)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
     setTasks([])
     window.api.readTasks(date).then((all) => {
       if (cancelled) return
-      const filtered = all
-      setTasks(filtered)
-      if (!filtered.some((t) => t.id === selectedTaskId)) {
-        onSelectTask(filtered.length > 0 ? filtered[0].id : null)
+      setTasks(all)
+      if (!all.some((t) => t.id === selectedTaskId)) {
+        onSelectTask(all.length > 0 ? all[0].id : null)
       }
     })
     window.api.isRest(date).then((r) => {
@@ -83,6 +101,45 @@ export default function DayView({
     onStatus(v ? '已标记休息日' : '已取消休息日')
   }
 
+  function openEdit(task: Task): void {
+    setEditing(task)
+    setEditTitle(task.title)
+    setEditBody(task.body)
+    setEditTags(task.tags)
+    setEditSubtasks(task.subtasks ?? [])
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (!editing) return
+    if (!editTitle.trim()) {
+      onStatus('请填写任务标题')
+      return
+    }
+    await window.api.updateTask(date, editing.id, {
+      title: editTitle.trim(),
+      body: editBody,
+      tags: editTags,
+      subtasks: editSubtasks
+    })
+    setEditing(null)
+    onTasksChanged()
+    onStatus('已保存（所有天同步）')
+    await loadTasks()
+  }
+
+  async function delTask(task: Task): Promise<void> {
+    if (
+      window.confirm(
+        `删除任务「${task.title}」？若该任务被派发到多天，所有天的该任务都会被一并移入临时回收站。`
+      )
+    ) {
+      await window.api.trashTask(date, task.id)
+      onTasksChanged()
+      onStatus('已移入回收站')
+      await loadTasks()
+    }
+  }
+
   return (
     <div className="day-view">
       <div className="day-panel">
@@ -98,7 +155,7 @@ export default function DayView({
         <div className="day-columns">
           <div className="day-list">
             {tasks.length === 0 ? (
-              <div className="task-empty">当天暂无该项目的任务，请在「任务发布」中发布</div>
+              <div className="task-empty">当天暂无任务，请在「任务发布」中发布</div>
             ) : (
               tasks.map((t) => (
                 <div
@@ -160,13 +217,61 @@ export default function DayView({
           </div>
           <div className="day-detail">
             {selected ? (
-              <TaskDetail task={selected} date={date} tags={tags} />
+              <>
+                <div className="detail-actions">
+                  <button className="ghost-btn" onClick={() => openEdit(selected)} title="编辑任务（所有天同步）">
+                    ✏️ 编辑
+                  </button>
+                  <button className="icon-btn danger" onClick={() => delTask(selected)} title="删除任务（进回收站，所有天同步）">
+                    🗑 删除
+                  </button>
+                </div>
+                <TaskDetail task={selected} date={date} tags={tags} />
+              </>
             ) : (
               <div className="task-empty">选择左侧任务查看详情</div>
             )}
           </div>
         </div>
       </div>
+
+      <Modal open={editing !== null} title="编辑任务" width={820} height={560} onClose={() => setEditing(null)}>
+        <div className="publish-form">
+          <input
+            className="publish-title"
+            placeholder="任务标题"
+            value={editTitle}
+            autoFocus
+            onChange={(e) => setEditTitle(e.target.value)}
+          />
+          <TagPicker
+            selectedIds={editTags}
+            allTags={tags}
+            onChange={setEditTags}
+            onGoToTags={onGoToTags}
+          />
+          <div className="subtask-editor">
+            <SubtaskEditor
+              subtasks={editSubtasks}
+              tags={tags}
+              onChange={setEditSubtasks}
+            />
+          </div>
+          <div className="publish-body">
+            <MarkdownEditor
+              value={editBody}
+              onChange={setEditBody}
+              attachFolder="publish"
+              onStatus={onStatus}
+            />
+          </div>
+          <div className="publish-actions">
+            <button className="publish-btn" onClick={saveEdit}>
+              保存
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

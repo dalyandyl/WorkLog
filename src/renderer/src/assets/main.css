@@ -939,6 +939,14 @@ body {
   flex-direction: column;
 }
 
+/* 日报详情操作栏（编辑/删除） */
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  margin-bottom: 10px;
+}
+
 .task-empty {
   color: var(--muted);
   font-size: 13px;
