@@ -39,6 +39,7 @@ import { lastDataMtime, webdavPull, webdavPush } from './sync'
 import { addPublishRecord, deletePublishRecord, readPublishRecords } from './history'
 import { buildDayMarkdown, buildRangeMarkdown, buildWeekMarkdown } from './exporter'
 import { exportBackup, importBackup } from './backup'
+import { migrateLegacyData, resetMigration } from './migrate'
 import { createTray, startReminder } from './tray'
 import {
   attachmentUrlToPath,
@@ -153,11 +154,14 @@ interface ExportOptions {
   end?: string
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId('com.worklog.app')
 
   // 日志存储根目录：打包后 = 安装目录/logs；开发中 = 项目目录/logs
   const storageRoot = getStorageRoot()
+
+  // 一次性迁移旧版本数据（旧标签/周报/发布记录/日报直建任务）
+  await migrateLegacyData(storageRoot)
 
   // 服务附件：wlattach://attachments/<folder>/<file> -> 磁盘文件
   protocol.handle('wlattach', (request) => {
@@ -449,6 +453,7 @@ app.whenReady().then(() => {
       const res = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
       if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true }
       await importBackup(storageRoot, res.filePaths[0])
+      await resetMigration(storageRoot) // 导入旧备份后重新执行迁移
       return { ok: true }
     } catch (err) {
       console.error('backup:import failed:', err)

@@ -4,6 +4,7 @@ import path from 'path'
 import { net } from 'electron'
 import type { WebdavConfig } from '../shared/types'
 import { exportBackup, importBackup } from './backup'
+import { resetMigration } from './migrate'
 
 function authHeader(cfg: WebdavConfig): string {
   return 'Basic ' + Buffer.from(`${cfg.username}:${cfg.password}`).toString('base64')
@@ -83,6 +84,7 @@ export async function webdavPull(
     const buf = Buffer.from(await res.arrayBuffer())
     await fs.writeFile(zipPath, buf)
     await importBackup(root, zipPath)
+    await resetMigration(root) // 拉取旧备份后重新执行迁移
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

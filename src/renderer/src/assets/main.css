@@ -2959,6 +2959,43 @@ input {
   outline: none;
 }
 
+/* Markdown 右键快捷菜单 */
+.md-ctx-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 150px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.md-ctx-item {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.md-ctx-item:hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.md-ctx-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}
+
 /* ===================== v3.7：日志报表 ===================== */
 .report-view {
   flex: 1;
