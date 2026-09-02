@@ -13,6 +13,38 @@ function fileUrl(cfg: WebdavConfig): string {
   return cfg.url.replace(/\/+$/, '') + '/worklog-logs.zip'
 }
 
+/** 扫描日志目录内所有文件的最近修改时间（用于冲突提示） */
+export async function lastDataMtime(root: string): Promise<number> {
+  let max = 0
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true })
+    for (const e of entries) {
+      const full = path.join(root, e.name)
+      if (e.isDirectory()) {
+        const subs = await fs.readdir(full, { withFileTypes: true })
+        for (const f of subs) {
+          try {
+            const st = await fs.stat(path.join(full, f.name))
+            if (st.mtimeMs > max) max = st.mtimeMs
+          } catch {
+            /* ignore */
+          }
+        }
+      } else {
+        try {
+          const st = await fs.stat(full)
+          if (st.mtimeMs > max) max = st.mtimeMs
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return max
+}
+
 /** 将本地日志目录打包上传到 WebDAV（覆盖远端 worklog-logs.zip） */
 export async function webdavPush(
   root: string,

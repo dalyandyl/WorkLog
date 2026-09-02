@@ -99,6 +99,12 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
     onStatus(r.ok ? '已上传到云端' : '上传失败：' + (r.error || '未知错误'))
   }
   async function doSyncPull(): Promise<void> {
+    // 冲突提示：本地有比最近同步更新的改动时先确认
+    const m = await window.api.syncLocalMtime()
+    const last = settings.webdav.lastSyncAt
+    if (m.ok && last && m.mtime > new Date(last).getTime()) {
+      if (!window.confirm('本地有未同步到云端的改动，从云端下载可能被合并覆盖，是否继续？')) return
+    }
     const r = await window.api.syncPull()
     onStatus(r.ok ? '已从云端下载合并' : '下载失败：' + (r.error || '未知错误'))
   }
@@ -200,6 +206,37 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                   {showWebdav ? '收起配置' : '配置'}
                 </button>
               </div>
+              <div className="settings-row">
+                <label className="settings-label">自动同步：</label>
+                <select
+                  className="gran-select"
+                  value={settings.webdav.autoMode}
+                  onChange={(e) => setWebdav({ autoMode: e.target.value as AppSettings['webdav']['autoMode'] })}
+                  title="自动同步时机"
+                >
+                  <option value="off">关闭</option>
+                  <option value="startup">启动时拉取</option>
+                  <option value="exit">退出时上传</option>
+                  <option value="interval">定时上传</option>
+                </select>
+                {settings.webdav.autoMode === 'interval' && (
+                  <>
+                    <input
+                      type="number"
+                      className="sync-interval-input"
+                      min={5}
+                      step={5}
+                      value={settings.webdav.intervalMinutes}
+                      onChange={(e) => setWebdav({ intervalMinutes: Number(e.target.value) || 30 })}
+                      title="定时上传间隔（分钟）"
+                    />
+                    <span className="settings-label">分钟</span>
+                  </>
+                )}
+              </div>
+              {settings.webdav.lastSyncAt && (
+                <div className="settings-hint">最近同步：{new Date(settings.webdav.lastSyncAt).toLocaleString()}</div>
+              )}
               {showWebdav && (
                 <div className="webdav-config">
                   <input className="webdav-input" placeholder="WebDAV 地址（如 https://dav.jianguoyun.com/dav/）" value={settings.webdav.url} onChange={(e) => setWebdav({ url: e.target.value })} />
@@ -208,6 +245,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                   <div className="settings-hint">推荐坚果云：设置 → 安全选项 → 添加应用密码，作为 WebDAV 密码</div>
                 </div>
               )}
+              <div className="settings-hint">冲突提示：下载前若检测到本地有未同步改动会先确认；多端使用请以较新上传为准</div>
             </div>
           )}
 

@@ -35,7 +35,7 @@ import {
 } from './weekly'
 import { searchTasks } from './search'
 import { rangeStats } from './stats'
-import { webdavPull, webdavPush } from './sync'
+import { lastDataMtime, webdavPull, webdavPush } from './sync'
 import { addPublishRecord, deletePublishRecord, readPublishRecords } from './history'
 import { buildDayMarkdown, buildRangeMarkdown, buildWeekMarkdown } from './exporter'
 import { exportBackup, importBackup } from './backup'
@@ -488,19 +488,51 @@ app.whenReady().then(() => {
   })
 
   // ---- WebDAV 跨设备同步 ----
-  ipcMain.handle('sync:push', async () => {
+  async function syncWithResult(which: 'push' | 'pull'): Promise<{ ok: boolean; error?: string }> {
     const s = await readSettings(storageRoot)
     if (!s.webdav.url || !s.webdav.username) {
       return { ok: false, error: '请先在设置中配置 WebDAV（地址 / 账号 / 密码）' }
     }
-    return webdavPush(storageRoot, s.webdav)
-  })
-  ipcMain.handle('sync:pull', async () => {
-    const s = await readSettings(storageRoot)
-    if (!s.webdav.url || !s.webdav.username) {
-      return { ok: false, error: '请先在设置中配置 WebDAV（地址 / 账号 / 密码）' }
+    const r = which === 'push' ? await webdavPush(storageRoot, s.webdav) : await webdavPull(storageRoot, s.webdav)
+    if (r.ok) {
+      s.webdav.lastSyncAt = new Date().toISOString()
+      await writeSettings(storageRoot, s)
     }
-    return webdavPull(storageRoot, s.webdav)
+    return r
+  }
+  ipcMain.handle('sync:push', () => syncWithResult('push'))
+  ipcMain.handle('sync:pull', () => syncWithResult('pull'))
+  ipcMain.handle('sync:localMtime', async () => ({ ok: true, mtime: await lastDataMtime(storageRoot) }))
+
+  // 自动同步：启动时拉取 / 定时上传
+  async function scheduleAutoSync(): Promise<void> {
+    const s = await readSettings(storageRoot)
+    if (!s.webdav.enabled || !s.webdav.url || !s.webdav.username) return
+    if (s.webdav.autoMode === 'startup') {
+      await syncWithResult('pull')
+    }
+    if (s.webdav.autoMode === 'interval') {
+      const minutes = Math.max(5, s.webdav.intervalMinutes || 30)
+      setInterval(() => {
+        void syncWithResult('push')
+      }, minutes * 60 * 1000)
+    }
+  }
+  void scheduleAutoSync()
+
+  // 退出时自动上传（仅一次）
+  let exitPushed = false
+  app.on('before-quit', (e) => {
+    if (exitPushed) return
+    exitPushed = true
+    void (async () => {
+      const s = await readSettings(storageRoot)
+      if (s.webdav.enabled && s.webdav.autoMode === 'exit' && s.webdav.url && s.webdav.username) {
+        e.preventDefault()
+        await syncWithResult('push')
+        app.quit()
+      }
+    })()
   })
 
   // ---- 报表导出（MD / Word） ----

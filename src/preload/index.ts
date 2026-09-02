@@ -107,6 +107,8 @@ const api = {
     ipcRenderer.invoke('backup:import'),
   syncPush: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('sync:push'),
   syncPull: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('sync:pull'),
+  syncLocalMtime: (): Promise<{ ok: boolean; mtime: number }> =>
+    ipcRenderer.invoke('sync:localMtime'),
 
   // ---- 附件 ----
   saveAttachmentImage: (folder: string, name: string, buf: ArrayBuffer): Promise<string> =>

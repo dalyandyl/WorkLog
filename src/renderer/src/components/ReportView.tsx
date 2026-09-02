@@ -28,7 +28,7 @@ const GRAN_OPTIONS: { value: ReportGranularity; label: string }[] = [
 const PART_LABEL: Record<ReportPart, string> = {
   summary: '汇总',
   detail: '明细',
-  all: '全部'
+  all: '汇总+明细'
 }
 
 export default function ReportView({ tags, onStatus }: ReportViewProps) {
@@ -114,21 +114,22 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
       </div>
 
       <div className="report-controls">
-        <div className="publish-granularity">
-          {GRAN_OPTIONS.map((g) => (
-            <label key={g.value}>
-              <input
-                type="radio"
-                name="reportgran"
-                checked={granularity === g.value}
-                onChange={() => setGranularity(g.value)}
-              />
-              {g.label}
-            </label>
-          ))}
+        <div className="publish-filter">
+          <select
+            className="gran-select"
+            value={granularity}
+            onChange={(e) => setGranularity(e.target.value as ReportGranularity)}
+            title="报表粒度"
+          >
+            {GRAN_OPTIONS.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+          <DatePicker value={anchor} onChange={setAnchor} title={anchorTitle()} />
+          <span className="report-range-label">当前范围：{rangeLabel}</span>
         </div>
-        <DatePicker value={anchor} onChange={setAnchor} title={anchorTitle()} />
-        <span className="report-range-label">当前范围：{rangeLabel}</span>
         <div className="report-actions">
           <div className="report-export-group">
             <span className="report-export-label">MD</span>
@@ -144,7 +145,7 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
             >
               <option value="summary">汇总</option>
               <option value="detail">明细</option>
-              <option value="all">全部</option>
+              <option value="all">汇总+明细</option>
             </select>
           </div>
           <div className="report-export-group">
@@ -161,7 +162,7 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
             >
               <option value="summary">汇总</option>
               <option value="detail">明细</option>
-              <option value="all">全部</option>
+              <option value="all">汇总+明细</option>
             </select>
           </div>
         </div>

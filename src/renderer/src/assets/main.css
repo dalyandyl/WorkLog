@@ -867,6 +867,23 @@ body {
   color: var(--muted);
 }
 
+.settings-label {
+  font-size: 13px;
+  color: var(--text);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.sync-interval-input {
+  width: 70px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
+}
+
 .attach-btn {
   border: 1px solid var(--border);
   background: var(--panel);
@@ -3123,6 +3140,18 @@ input {
 .task-note-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.task-note-view {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .weekly-task-done-at {

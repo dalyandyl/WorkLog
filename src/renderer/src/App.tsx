@@ -25,7 +25,15 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'system',
     reminder: { enabled: false, time: '18:00' },
-    webdav: { enabled: false, url: '', username: '', password: '' }
+    webdav: {
+      enabled: false,
+      url: '',
+      username: '',
+      password: '',
+      autoMode: 'off',
+      intervalMinutes: 30,
+      lastSyncAt: null
+    }
   })
   const [tags, setTags] = useState<Tag[]>([])
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set())

@@ -19,7 +19,15 @@ export function settingsPath(root: string): string {
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   reminder: { enabled: false, time: '18:00' },
-  webdav: { enabled: false, url: '', username: '', password: '' }
+  webdav: {
+    enabled: false,
+    url: '',
+    username: '',
+    password: '',
+    autoMode: 'off',
+    intervalMinutes: 30,
+    lastSyncAt: null
+  }
 }
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
@@ -48,7 +56,10 @@ export async function readSettings(root: string): Promise<AppSettings> {
       enabled: s.webdav?.enabled ?? DEFAULT_SETTINGS.webdav.enabled,
       url: s.webdav?.url ?? DEFAULT_SETTINGS.webdav.url,
       username: s.webdav?.username ?? DEFAULT_SETTINGS.webdav.username,
-      password: s.webdav?.password ?? DEFAULT_SETTINGS.webdav.password
+      password: s.webdav?.password ?? DEFAULT_SETTINGS.webdav.password,
+      autoMode: s.webdav?.autoMode ?? DEFAULT_SETTINGS.webdav.autoMode,
+      intervalMinutes: s.webdav?.intervalMinutes ?? DEFAULT_SETTINGS.webdav.intervalMinutes,
+      lastSyncAt: s.webdav?.lastSyncAt ?? DEFAULT_SETTINGS.webdav.lastSyncAt
     }
   }
 }

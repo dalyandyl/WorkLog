@@ -90,6 +90,12 @@ export function buildReportMarkdown(
           .map((n) => `\`#${n}\``)
           .join(' ')
         lines.push(`- [${t.done ? 'x' : ' '}] ${t.title}${tagStr ? ' ' + tagStr : ''}`)
+        const timeParts = [`派发：${new Date(t.publishedAt).toLocaleString()}`]
+        if (t.completedAt) timeParts.push(`完成：${new Date(t.completedAt).toLocaleString()}`)
+        lines.push(`  > ${timeParts.join(' · ')}`)
+        if (t.note && t.note.trim()) {
+          lines.push(`  > 📝 备注：${t.note.trim()}`)
+        }
         for (const st of t.subtasks ?? []) {
           lines.push(`    - [${st.done ? 'x' : ' '}] ${st.title}`)
         }

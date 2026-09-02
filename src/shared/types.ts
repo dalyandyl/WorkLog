@@ -12,6 +12,11 @@ export interface WebdavConfig {
   url: string // 如 https://dav.jianguoyun.com/dav/
   username: string
   password: string
+  /** 自动同步时机：off=关闭 / startup=启动时拉取 / exit=退出时上传 / interval=定时上传 */
+  autoMode: 'off' | 'startup' | 'exit' | 'interval'
+  intervalMinutes: number
+  /** 最近一次同步成功时间（ISO） */
+  lastSyncAt: string | null
 }
 
 export interface AppSettings {

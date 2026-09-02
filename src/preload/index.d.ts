@@ -80,6 +80,7 @@ export interface WorkLogApi {
   backupImport(): Promise<{ ok: boolean; canceled?: boolean; error?: string }>
   syncPush(): Promise<{ ok: boolean; error?: string }>
   syncPull(): Promise<{ ok: boolean; error?: string }>
+  syncLocalMtime(): Promise<{ ok: boolean; mtime: number }>
 
   // 附件
   saveAttachmentImage(folder: string, name: string, buf: ArrayBuffer): Promise<string>
