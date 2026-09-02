@@ -1,7 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { NewTaskInput, Task } from '../shared/types'
-import { UNCATEGORIZED_ID } from './projects'
 
 export type { NewTaskInput, Task }
 
@@ -23,11 +22,10 @@ export async function readTasks(root: string, date: string): Promise<Task[]> {
     const raw = await fs.readFile(dayFilePath(root, date), 'utf-8')
     const data = JSON.parse(raw)
     const rawTasks = Array.isArray(data?.tasks) ? (data.tasks as Task[]) : []
-    // 兼容旧数据：补默认子任务数组、项目、派发/完成时间
+    // 兼容旧数据：补默认子任务数组、派发/完成时间
     const tasks = rawTasks.map((t) => ({
       ...t,
       subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
-      projectId: t.projectId || UNCATEGORIZED_ID,
       publishedAt: t.publishedAt || t.createdAt || new Date().toISOString(),
       completedAt: t.completedAt ?? (t.done ? (t.updatedAt || t.createdAt) : null)
     }))
@@ -67,7 +65,6 @@ export async function createTask(
       done: !!s.done,
       tags: [...(s.tags ?? [])]
     })),
-    projectId: input.projectId || UNCATEGORIZED_ID,
     publishedAt: now,
     completedAt: null,
     order: maxOrder + 1,
@@ -83,7 +80,7 @@ export async function updateTask(
   root: string,
   date: string,
   taskId: string,
-  patch: Partial<Pick<Task, 'title' | 'tags' | 'done' | 'body' | 'subtasks' | 'projectId' | 'completedAt'>>
+  patch: Partial<Pick<Task, 'title' | 'tags' | 'done' | 'body' | 'subtasks' | 'completedAt'>>
 ): Promise<Task | null> {
   const tasks = await readTasks(root, date)
   const task = tasks.find((t) => t.id === taskId)
@@ -98,7 +95,6 @@ export async function updateTask(
   }
   if (patch.body !== undefined) task.body = patch.body
   if (patch.subtasks !== undefined) task.subtasks = patch.subtasks
-  if (patch.projectId !== undefined) task.projectId = patch.projectId
   if (patch.completedAt !== undefined) task.completedAt = patch.completedAt
   task.updatedAt = new Date().toISOString()
   await writeTasks(root, date, tasks)
@@ -168,21 +164,18 @@ export async function readTasksMany(
   return result
 }
 
-/** 任务发布：把任务复制到所选日期 × 所选项目（每天每项目独立副本） */
+/** 任务发布：把任务复制到所选日期（区间发布时同批次同任务 id，见 publishTasks 共享实现） */
 export async function publishTasks(
   root: string,
   dates: string[],
-  projectIds: string[],
   input: NewTaskInput
-): Promise<{ count: number; instances: { date: string; projectId: string; taskId: string }[] }> {
+): Promise<{ count: number; instances: { date: string; taskId: string }[] }> {
   let count = 0
-  const instances: { date: string; projectId: string; taskId: string }[] = []
+  const instances: { date: string; taskId: string }[] = []
   for (const d of dates) {
-    for (const pid of projectIds) {
-      const task = await createTask(root, d, { ...input, projectId: pid })
-      instances.push({ date: d, projectId: pid, taskId: task.id })
-      count++
-    }
+    const task = await createTask(root, d, { ...input })
+    instances.push({ date: d, taskId: task.id })
+    count++
   }
   return { count, instances }
 }

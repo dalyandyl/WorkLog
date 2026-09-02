@@ -6,15 +6,13 @@ import TagManager from './components/TagManager'
 import TaskPublish from './components/TaskPublish'
 import TrashView from './components/TrashView'
 import ReportView from './components/ReportView'
-import ProjectView from './components/ProjectView'
+import WorkView from './components/WorkView'
 import SettingsModal from './components/SettingsModal'
 import Modal from './components/Modal'
-import type { AppSettings, Project, Tag } from './types'
+import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'stats' | 'report' | 'project'
-
-const DEFAULT_PROJECT_COLOR = '#8b5cf6'
+type Mode = 'publish' | 'day' | 'stats' | 'report'
 
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
@@ -30,8 +28,6 @@ export default function App() {
     webdav: { enabled: false, url: '', username: '', password: '' }
   })
   const [tags, setTags] = useState<Tag[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState('uncategorized')
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set())
   const [storageRoot, setStorageRoot] = useState('')
   const [status, setStatus] = useState('加载中…')
@@ -40,20 +36,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [trashOpen, setTrashOpen] = useState(false)
-  const [projectDialog, setProjectDialog] = useState<'add' | null>(null)
-  const [editProject, setEditProject] = useState<Project | null>(null)
-  const [projName, setProjName] = useState('')
-  const [projError, setProjError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.getStorageRoot().then(setStorageRoot)
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
     window.api.listTags().then(setTags)
     window.api.getSettings().then(setSettings)
-    window.api.listProjects().then((ps) => {
-      setProjects(ps)
-      setSelectedProjectId((cur) => (ps.some((p) => p.id === cur) ? cur : ps[0]?.id ?? 'uncategorized'))
-    })
   }, [])
 
   useEffect(() => {
@@ -67,12 +55,6 @@ export default function App() {
   }
   function refreshTags(): void {
     window.api.listTags().then(setTags)
-  }
-  function refreshProjects(): void {
-    window.api.listProjects().then((ps) => {
-      setProjects(ps)
-      setSelectedProjectId((cur) => (ps.some((p) => p.id === cur) ? cur : ps[0]?.id ?? 'uncategorized'))
-    })
   }
 
   function updateSettings(patch: Partial<AppSettings>): void {
@@ -93,67 +75,6 @@ export default function App() {
     setDaySel({ date: d, taskId: null })
   }
 
-  function enterProject(id: string): void {
-    setSelectedProjectId(id)
-    setMode('project')
-  }
-
-  function openAddProject(): void {
-    setProjName('')
-    setProjectDialog('add')
-  }
-
-  function openEditProject(p: Project): void {
-    setEditProject(p)
-    setProjName(p.name)
-    setProjectDialog('add')
-  }
-
-  async function submitProject(): Promise<void> {
-    const v = projName.trim()
-    if (!v) return
-    if (editProject) {
-      const r = await window.api.renameProject(editProject.id, v)
-      if (!r) {
-        setProjError(`项目「${v}」已存在`)
-        return
-      }
-      onCloseProjectDialog()
-      refreshProjects()
-      setStatus('已重命名项目')
-    } else {
-      const p = await window.api.createProject(v, DEFAULT_PROJECT_COLOR)
-      if (!p) {
-        setProjError(`项目「${v}」已存在`)
-        return
-      }
-      onCloseProjectDialog()
-      refreshProjects()
-      setSelectedProjectId(p.id)
-      setMode('project')
-      setStatus('已创建项目')
-    }
-  }
-
-  function onCloseProjectDialog(): void {
-    setProjectDialog(null)
-    setEditProject(null)
-    setProjError(null)
-    setProjName('')
-  }
-
-  async function deleteProject(p: Project): Promise<void> {
-    if (p.id === 'uncategorized') {
-      setProjError('「未分类」为默认项目，不可删除')
-      return
-    }
-    if (window.confirm(`删除项目「${p.name}」？该项目下的任务将归入「未分类」。`)) {
-      await window.api.deleteProject(p.id)
-      refreshProjects()
-      setStatus('已删除项目')
-    }
-  }
-
   return (
     <div className="app">
       <header className="topbar">
@@ -161,6 +82,9 @@ export default function App() {
         <div className="mode-switch">
           <button className={mode === 'publish' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('publish')}>
             任务发布
+          </button>
+          <button className={mode === 'day' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('day')}>
+            日报 / 周报
           </button>
           <button className={mode === 'stats' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('stats')}>
             统计
@@ -170,52 +94,13 @@ export default function App() {
           </button>
         </div>
         <div className="topbar-right">
-          <SearchBox onPick={(d, taskId) => { setMode('project'); setDate(d); setDaySel({ date: d, taskId }) }} projects={projects} />
+          <SearchBox onPick={(d, taskId) => { setMode('day'); setDate(d); setDaySel({ date: d, taskId }) }} />
           <span className="status" title={storageRoot}>{status}</span>
         </div>
       </header>
 
       <div className="body">
         <aside className="sidebar">
-          <div className="project-menu">
-            <div className="project-menu-title">项目</div>
-            <div className="project-menu-list">
-              {projects.map((p) => (
-                <div
-                  key={p.id}
-                  className={
-                    'project-menu-item' +
-                    (mode === 'project' && selectedProjectId === p.id ? ' active' : '')
-                  }
-                  onClick={() => enterProject(p.id)}
-                  title={p.name}
-                >
-                  <span className="project-folder">📁</span>
-                  <span className="project-menu-name">{p.name}</span>
-                  <span className="project-menu-ops">
-                    <button
-                      className="icon-btn"
-                      onClick={(e) => { e.stopPropagation(); openEditProject(p) }}
-                      title="重命名项目"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="icon-btn danger"
-                      onClick={(e) => { e.stopPropagation(); deleteProject(p) }}
-                      title="删除项目"
-                    >
-                      🗑
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button className="project-add-btn" onClick={openAddProject}>
-              ＋ 新建项目
-            </button>
-          </div>
-
           <div className="sidebar-bottom">
             <button className="sidebar-tool-btn" onClick={() => setTagsOpen(true)} title="标签管理（全局）">
               🏷 标签
@@ -236,16 +121,14 @@ export default function App() {
           {mode === 'publish' && (
             <TaskPublish
               tags={tags}
-              projectId={selectedProjectId}
               onStatus={setStatus}
               onPublished={refreshTaskDates}
               onGoToTags={() => setTagsOpen(true)}
             />
           )}
 
-          {mode === 'project' && (
-            <ProjectView
-              projectId={selectedProjectId}
+          {mode === 'day' && (
+            <WorkView
               tags={tags}
               date={date}
               weekKey={weekKey}
@@ -258,10 +141,10 @@ export default function App() {
             />
           )}
 
-          {mode === 'stats' && <StatsView date={date} projectId={selectedProjectId} />}
+          {mode === 'stats' && <StatsView date={date} />}
 
           {mode === 'report' && (
-            <ReportView tags={tags} projectId={selectedProjectId} onStatus={setStatus} />
+            <ReportView tags={tags} onStatus={setStatus} />
           )}
         </main>
       </div>
@@ -293,27 +176,6 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onStatus={setStatus}
       />
-
-      {/* 新建/重命名项目弹窗 */}
-      <Modal open={projectDialog !== null} title={editProject ? '重命名项目' : '新建项目'} width={420} onClose={onCloseProjectDialog}>
-        <div className="tag-create-form">
-          <label className="tag-create-label">项目名称</label>
-          <input
-            className="tag-create-name"
-            placeholder="项目名称"
-            autoFocus
-            value={projName}
-            onChange={(e) => setProjName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submitProject() }}
-          />
-          {projError && <div className="tag-error-msg">{projError}</div>}
-          <div className="tag-create-actions">
-            <button className="tag-create-btn" onClick={submitProject} disabled={!projName.trim()}>
-              {editProject ? '保存' : '创建'}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }

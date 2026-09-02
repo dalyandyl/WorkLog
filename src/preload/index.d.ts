@@ -3,7 +3,6 @@ import type {
   ExportOptions,
   MonthStats,
   NewTaskInput,
-  Project,
   PublishRecord,
   SearchHit,
   Tag,
@@ -27,9 +26,8 @@ export interface WorkLogApi {
   reorderTasks(date: string, orderedIds: string[]): Promise<void>
   publishTasks(
     dates: string[],
-    projectIds: string[],
     input: NewTaskInput
-  ): Promise<{ count: number; instances: { date: string; projectId: string; taskId: string }[] }>
+  ): Promise<{ count: number; instances: { date: string; taskId: string }[] }>
 
   // 标签
   listTags(): Promise<Tag[]>
@@ -37,13 +35,6 @@ export interface WorkLogApi {
   renameTag(id: string, name: string): Promise<Tag | null>
   recolorTag(id: string, color: string): Promise<Tag | null>
   deleteTag(id: string): Promise<{ ok: boolean }>
-
-  // 项目
-  listProjects(): Promise<Project[]>
-  createProject(name: string, color: string): Promise<Project | null>
-  renameProject(id: string, name: string): Promise<Project | null>
-  recolorProject(id: string, color: string): Promise<Project | null>
-  deleteProject(id: string): Promise<{ ok: boolean }>
 
   // 回收站
   listTrash(): Promise<TrashItem[]>
@@ -54,8 +45,8 @@ export interface WorkLogApi {
 
   // 周报
   getWeekInfoByKey(weekKey: string): Promise<WeekInfo | null>
-  readWeeklySummary(weekKey: string, projectId: string): Promise<WeeklySummary>
-  writeWeeklySummary(weekKey: string, projectId: string, summary: string): Promise<{ ok: boolean }>
+  readWeeklySummary(weekKey: string): Promise<WeeklySummary>
+  writeWeeklySummary(weekKey: string, summary: string): Promise<{ ok: boolean }>
   shiftWeekKey(weekKey: string, delta: number): Promise<string | null>
 
   // 休息日 / 设置
@@ -65,8 +56,8 @@ export interface WorkLogApi {
   setSettings(s: AppSettings): Promise<void>
 
   // 搜索 / 统计
-  searchTasks(query: string, projectId?: string): Promise<SearchHit[]>
-  rangeStats(start: string, end: string, projectId?: string): Promise<MonthStats>
+  searchTasks(query: string): Promise<SearchHit[]>
+  rangeStats(start: string, end: string): Promise<MonthStats>
 
   // 发布历史
   listPublishHistory(): Promise<PublishRecord[]>

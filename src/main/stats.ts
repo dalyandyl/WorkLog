@@ -9,8 +9,7 @@ export type { MonthStats, TagCount }
 export async function rangeStats(
   root: string,
   start: string,
-  end: string,
-  projectId?: string
+  end: string
 ): Promise<MonthStats> {
   const dates = enumerateDates(start, end)
 
@@ -24,8 +23,7 @@ export async function rangeStats(
   const daily: { date: string; day: number; taskCount: number; doneCount: number }[] = []
 
   for (const date of dates) {
-    const all = await readTasks(root, date)
-    const tasks = projectId ? all.filter((t) => t.projectId === projectId) : all
+    const tasks = await readTasks(root, date)
     const day = Number(date.slice(8, 10))
     const taskCount = tasks.length
     const doneCount = tasks.filter((t) => t.done).length

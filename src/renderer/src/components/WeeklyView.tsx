@@ -10,7 +10,6 @@ import Modal from './Modal'
 interface WeeklyViewProps {
   weekKey: string
   tags: Tag[]
-  projectId: string
   onWeekChange: (weekKey: string) => void
   onStatus: (msg: string) => void
 }
@@ -87,7 +86,7 @@ function DayBlock({
   )
 }
 
-export default function WeeklyView({ weekKey, tags, projectId, onWeekChange, onStatus }: WeeklyViewProps) {
+export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: WeeklyViewProps) {
   const [info, setInfo] = useState<WeekInfo | null>(null)
   const [tasksByDate, setTasksByDate] = useState<Record<string, Task[]>>({})
   const [restSet, setRestSet] = useState<Set<string>>(new Set())
@@ -105,12 +104,7 @@ export default function WeeklyView({ weekKey, tags, projectId, onWeekChange, onS
       setInfo(wi)
       const map = await window.api.readTasksMany(wi.dates)
       if (cancelled) return
-      // 按项目过滤
-      const filtered: Record<string, Task[]> = {}
-      for (const [d, ts] of Object.entries(map)) {
-        filtered[d] = ts.filter((t) => t.projectId === projectId)
-      }
-      setTasksByDate(filtered)
+      setTasksByDate(map)
       const rest = new Set<string>()
       for (const d of wi.dates) {
         if (await window.api.isRest(d)) rest.add(d)
@@ -118,7 +112,7 @@ export default function WeeklyView({ weekKey, tags, projectId, onWeekChange, onS
       if (cancelled) return
       setRestSet(rest)
     })
-    window.api.readWeeklySummary(weekKey, projectId).then((s) => {
+    window.api.readWeeklySummary(weekKey).then((s) => {
       if (cancelled) return
       setSummary(s.summary)
       setSummaryLoaded(true)
@@ -128,13 +122,13 @@ export default function WeeklyView({ weekKey, tags, projectId, onWeekChange, onS
       if (summaryTimer.current !== null) window.clearTimeout(summaryTimer.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekKey, projectId])
+  }, [weekKey])
 
   function changeSummary(md: string): void {
     setSummary(md)
     if (summaryTimer.current !== null) window.clearTimeout(summaryTimer.current)
     summaryTimer.current = window.setTimeout(() => {
-      window.api.writeWeeklySummary(weekKey, projectId, md)
+      window.api.writeWeeklySummary(weekKey, md)
     }, 800)
   }
 

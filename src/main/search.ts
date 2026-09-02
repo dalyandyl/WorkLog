@@ -6,12 +6,10 @@ export type { SearchHit }
 
 /**
  * 检索任务：标题 / 正文 / 子任务标题 / 标签名（匹配标签名即命中使用该标签的任务）。
- * 支持按项目过滤（projectId 为空则全局搜索）。
  */
 export async function searchTasks(
   root: string,
-  query: string,
-  projectId?: string
+  query: string
 ): Promise<SearchHit[]> {
   const q = query.trim().toLowerCase()
   if (!q) return []
@@ -24,8 +22,7 @@ export async function searchTasks(
   const hits: SearchHit[] = []
 
   for (const date of dates) {
-    const all = await readTasks(root, date)
-    const tasks = projectId ? all.filter((t) => t.projectId === projectId) : all
+    const tasks = await readTasks(root, date)
     for (const t of tasks) {
       const plainBody = t.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
       const lowerBody = plainBody.toLowerCase()
@@ -60,7 +57,7 @@ export async function searchTasks(
         if (plainBody.length > 60) snippet += '…'
       }
       snippet = snippet.trim()
-      hits.push({ date, taskId: t.id, title: t.title, snippet, projectId: t.projectId })
+      hits.push({ date, taskId: t.id, title: t.title, snippet })
       if (hits.length >= 50) {
         hits.splice(0, hits.length - 50)
       }

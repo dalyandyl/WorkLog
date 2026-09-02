@@ -15,7 +15,6 @@ import Modal from './Modal'
 
 interface ReportViewProps {
   tags: Tag[]
-  projectId: string
   onStatus: (msg: string) => void
 }
 
@@ -32,7 +31,7 @@ const PART_LABEL: Record<ReportPart, string> = {
   all: '全部'
 }
 
-export default function ReportView({ tags, projectId, onStatus }: ReportViewProps) {
+export default function ReportView({ tags, onStatus }: ReportViewProps) {
   const [granularity, setGranularity] = useState<ReportGranularity>('month')
   const [anchor, setAnchor] = useState(() => toDateStr(new Date()))
   const [stats, setStats] = useState<MonthStats | null>(null)
@@ -46,21 +45,17 @@ export default function ReportView({ tags, projectId, onStatus }: ReportViewProp
     if (dates.length === 0) return
     let cancelled = false
     Promise.all([
-      window.api.rangeStats(dates[0], dates[dates.length - 1], projectId),
+      window.api.rangeStats(dates[0], dates[dates.length - 1]),
       window.api.readTasksMany(dates)
     ]).then(([s, tbd]) => {
       if (cancelled) return
-      const filtered: Record<string, Task[]> = {}
-      for (const [d, ts] of Object.entries(tbd)) {
-        filtered[d] = ts.filter((t) => t.projectId === projectId)
-      }
       setStats(s)
-      setTasksByDate(filtered)
+      setTasksByDate(tbd)
     })
     return () => {
       cancelled = true
     }
-  }, [granularity, anchor, projectId])
+  }, [granularity, anchor])
 
   const dates = useMemo(() => expandReportDates(granularity, anchor), [granularity, anchor])
 

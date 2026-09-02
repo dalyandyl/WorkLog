@@ -5,7 +5,6 @@ import DatePicker from './DatePicker'
 interface StatsViewProps {
   /** 初始区间基准（取其年月构造当月区间） */
   date: string
-  projectId: string
 }
 
 function monthRange(year: number, month: number): { start: string; end: string } {
@@ -15,7 +14,7 @@ function monthRange(year: number, month: number): { start: string; end: string }
   return { start, end }
 }
 
-export default function StatsView({ date, projectId }: StatsViewProps) {
+export default function StatsView({ date }: StatsViewProps) {
   const [y, m] = [Number(date.slice(0, 4)), Number(date.slice(5, 7))]
   const [range, setRange] = useState(() => monthRange(y, m))
   const [stats, setStats] = useState<MonthStats | null>(null)
@@ -36,13 +35,13 @@ export default function StatsView({ date, projectId }: StatsViewProps) {
 
   useEffect(() => {
     let cancelled = false
-    window.api.rangeStats(range.start, range.end, projectId).then((s) => {
+    window.api.rangeStats(range.start, range.end).then((s) => {
       if (!cancelled) setStats(s)
     })
     return () => {
       cancelled = true
     }
-  }, [range.start, range.end, projectId])
+  }, [range.start, range.end])
 
   if (!stats) return <div className="loading">统计中…</div>
 

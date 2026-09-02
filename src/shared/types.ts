@@ -20,15 +20,7 @@ export interface AppSettings {
   webdav: WebdavConfig
 }
 
-/** 项目 */
-export interface Project {
-  id: string
-  name: string
-  color: string // '#rrggbb'
-  createdAt: string
-}
-
-/** 标签（全局标签库，多项目共享） */
+/** 标签（全局标签库） */
 export interface Tag {
   id: string
   name: string
@@ -54,7 +46,6 @@ export interface Task {
   done: boolean
   body: string // 正文 Markdown
   subtasks: Subtask[]
-  projectId: string // 归属项目
   publishedAt: string // 派发时间（发布时刻）
   completedAt: string | null // 完成时间（勾选完成时刻，未完成 null）
   order: number
@@ -68,7 +59,6 @@ export interface NewTaskInput {
   tags: string[]
   body: string
   subtasks: Subtask[]
-  projectId: string
 }
 
 /** 任务更新补丁 */
@@ -78,7 +68,6 @@ export interface TaskPatch {
   done?: boolean
   body?: string
   subtasks?: Subtask[]
-  projectId?: string
   completedAt?: string | null
 }
 
@@ -105,7 +94,6 @@ export interface SearchHit {
   taskId: string
   title: string
   snippet: string
-  projectId: string
 }
 
 /** 标签计数 */
@@ -134,19 +122,17 @@ export interface PublishRecord {
   id: string
   title: string
   tags: string[] // 标签 id 列表
-  projectIds: string[] // 发布到的项目
   dates: string[] // 发布目标日期
   body: string // 正文 Markdown
   subtasks: Subtask[]
   publishedAt: string
   /** 本批次发布出的任务实例定位（删除整批时精确回收） */
-  instances: { date: string; projectId: string; taskId: string }[]
+  instances: { date: string; taskId: string }[]
 }
 
-/** 回收站中的单个任务实例（含其原属日期与项目） */
+/** 回收站中的单个任务实例（含其原属日期） */
 export interface TrashedTask {
   date: string
-  projectId: string
   task: Task
 }
 
@@ -154,14 +140,12 @@ export interface TrashedTask {
 export interface TrashItem {
   id: string
   title: string
-  projectIds: string[]
   deletedAt: string
   tasks: TrashedTask[]
 }
 
 /** 导出 Markdown 的选项 */
-export type ExportOptions = { projectId?: string } & (
+export type ExportOptions =
   | { mode: 'day'; date: string }
   | { mode: 'week'; weekKey: string }
   | { mode: 'range'; start: string; end: string }
-)

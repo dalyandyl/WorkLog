@@ -3,8 +3,7 @@ import type { Tag } from '../types'
 import DayView from './DayView'
 import WeeklyView from './WeeklyView'
 
-interface ProjectViewProps {
-  projectId: string
+interface WorkViewProps {
   tags: Tag[]
   date: string
   weekKey: string
@@ -16,9 +15,8 @@ interface ProjectViewProps {
   onStatus: (msg: string) => void
 }
 
-/** 项目主视图：日报 / 周报 切换 */
-export default function ProjectView({
-  projectId,
+/** 日报 / 周报 切换容器 */
+export default function WorkView({
   tags,
   date,
   weekKey,
@@ -28,7 +26,7 @@ export default function ProjectView({
   onSelectTask,
   onTasksChanged,
   onStatus
-}: ProjectViewProps) {
+}: WorkViewProps) {
   const [tab, setTab] = useState<'day' | 'week'>('day')
 
   return (
@@ -52,7 +50,6 @@ export default function ProjectView({
           <DayView
             date={date}
             tags={tags}
-            projectId={projectId}
             selectedTaskId={daySel.date === date ? daySel.taskId : null}
             onSelectTask={(id) => onSelectTask(id)}
             onDateChange={onDateChange}
@@ -64,7 +61,6 @@ export default function ProjectView({
           <WeeklyView
             weekKey={weekKey}
             tags={tags}
-            projectId={projectId}
             onWeekChange={onWeekChange}
             onStatus={onStatus}
           />

@@ -5,17 +5,16 @@ import type { WeeklySummary } from '../shared/types'
 
 export type { WeeklySummary }
 
-export function weeklyPath(root: string, weekKey: string, projectId: string): string {
-  return path.join(root, 'weekly', `${weekKey}__${projectId}.json`)
+export function weeklyPath(root: string, weekKey: string): string {
+  return path.join(root, 'weekly', `${weekKey}.json`)
 }
 
 export async function readWeeklySummary(
   root: string,
-  weekKey: string,
-  projectId: string
+  weekKey: string
 ): Promise<WeeklySummary> {
   try {
-    const raw = await fs.readFile(weeklyPath(root, weekKey, projectId), 'utf-8')
+    const raw = await fs.readFile(weeklyPath(root, weekKey), 'utf-8')
     const data = JSON.parse(raw)
     return { weekKey, summary: typeof data.summary === 'string' ? data.summary : '', exists: true }
   } catch {
@@ -26,17 +25,16 @@ export async function readWeeklySummary(
 export async function writeWeeklySummary(
   root: string,
   weekKey: string,
-  projectId: string,
   summary: string
 ): Promise<{ ok: boolean }> {
-  const file = weeklyPath(root, weekKey, projectId)
+  const file = weeklyPath(root, weekKey)
   try {
     if (summary.trim() === '') {
       await fs.rm(file, { force: true })
       return { ok: true }
     }
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await fs.writeFile(file, JSON.stringify({ weekKey, projectId, summary }, null, 2), 'utf-8')
+    await fs.writeFile(file, JSON.stringify({ weekKey, summary }, null, 2), 'utf-8')
     return { ok: true }
   } catch (err) {
     console.error('writeWeeklySummary failed:', err)

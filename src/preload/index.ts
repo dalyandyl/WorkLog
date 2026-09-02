@@ -4,7 +4,6 @@ import type {
   ExportOptions,
   MonthStats,
   NewTaskInput,
-  Project,
   PublishRecord,
   SearchHit,
   Tag,
@@ -33,10 +32,9 @@ const api = {
     ipcRenderer.invoke('tasks:reorder', date, orderedIds),
   publishTasks: (
     dates: string[],
-    projectIds: string[],
     input: NewTaskInput
-  ): Promise<{ count: number; instances: { date: string; projectId: string; taskId: string }[] }> =>
-    ipcRenderer.invoke('tasks:publish', dates, projectIds, input),
+  ): Promise<{ count: number; instances: { date: string; taskId: string }[] }> =>
+    ipcRenderer.invoke('tasks:publish', dates, input),
 
   // ---- 标签库 ----
   listTags: (): Promise<Tag[]> => ipcRenderer.invoke('tags:list'),
@@ -47,17 +45,6 @@ const api = {
   recolorTag: (id: string, color: string): Promise<Tag | null> =>
     ipcRenderer.invoke('tags:recolor', id, color),
   deleteTag: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('tags:delete', id),
-
-  // ---- 项目 ----
-  listProjects: (): Promise<Project[]> => ipcRenderer.invoke('projects:list'),
-  createProject: (name: string, color: string): Promise<Project | null> =>
-    ipcRenderer.invoke('projects:create', name, color),
-  renameProject: (id: string, name: string): Promise<Project | null> =>
-    ipcRenderer.invoke('projects:rename', id, name),
-  recolorProject: (id: string, color: string): Promise<Project | null> =>
-    ipcRenderer.invoke('projects:recolor', id, color),
-  deleteProject: (id: string): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke('projects:delete', id),
 
   // ---- 回收站 ----
   listTrash: (): Promise<TrashItem[]> => ipcRenderer.invoke('trash:list'),
@@ -70,13 +57,12 @@ const api = {
   // ---- 周报 ----
   getWeekInfoByKey: (weekKey: string): Promise<WeekInfo | null> =>
     ipcRenderer.invoke('weekly:info', weekKey),
-  readWeeklySummary: (weekKey: string, projectId: string): Promise<WeeklySummary> =>
-    ipcRenderer.invoke('weekly:read', weekKey, projectId),
+  readWeeklySummary: (weekKey: string): Promise<WeeklySummary> =>
+    ipcRenderer.invoke('weekly:read', weekKey),
   writeWeeklySummary: (
     weekKey: string,
-    projectId: string,
     summary: string
-  ): Promise<{ ok: boolean }> => ipcRenderer.invoke('weekly:write', weekKey, projectId, summary),
+  ): Promise<{ ok: boolean }> => ipcRenderer.invoke('weekly:write', weekKey, summary),
   shiftWeekKey: (weekKey: string, delta: number): Promise<string | null> =>
     ipcRenderer.invoke('weekly:shift', weekKey, delta),
 
@@ -88,10 +74,10 @@ const api = {
   setSettings: (s: AppSettings): Promise<void> => ipcRenderer.invoke('settings:set', s),
 
   // ---- 搜索 / 统计 / 导出 ----
-  searchTasks: (query: string, projectId?: string): Promise<SearchHit[]> =>
-    ipcRenderer.invoke('search:tasks', query, projectId),
-  rangeStats: (start: string, end: string, projectId?: string): Promise<MonthStats> =>
-    ipcRenderer.invoke('stats:range', start, end, projectId),
+  searchTasks: (query: string): Promise<SearchHit[]> =>
+    ipcRenderer.invoke('search:tasks', query),
+  rangeStats: (start: string, end: string): Promise<MonthStats> =>
+    ipcRenderer.invoke('stats:range', start, end),
 
   // ---- 发布历史 ----
   listPublishHistory: (): Promise<PublishRecord[]> => ipcRenderer.invoke('history:list'),

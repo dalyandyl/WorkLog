@@ -3,7 +3,6 @@ export type {
   ExportOptions,
   MonthStats,
   NewTaskInput,
-  Project,
   PublishRecord,
   ReminderSetting,
   SearchHit,

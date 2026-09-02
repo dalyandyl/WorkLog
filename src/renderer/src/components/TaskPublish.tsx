@@ -7,11 +7,9 @@ import TagPicker from './TagPicker'
 import Modal from './Modal'
 import Drawer from './Drawer'
 import DatePicker from './DatePicker'
-import MultiSelect from './MultiSelect'
 
 interface TaskPublishProps {
   tags: Tag[]
-  projectId: string
   onStatus: (msg: string) => void
   onPublished: () => void
   onGoToTags: () => void
@@ -46,7 +44,6 @@ function histRangeLabel(g: PublishGranularity, anchor: string): string {
 
 export default function TaskPublish({
   tags,
-  projectId,
   onStatus,
   onPublished,
   onGoToTags
@@ -92,7 +89,7 @@ export default function TaskPublish({
     const list: { date: string; task: Task }[] = []
     for (const [d, ts] of Object.entries(map)) {
       for (const t of ts) {
-        if (t.projectId === projectId) list.push({ date: d, task: t })
+        list.push({ date: d, task: t })
       }
     }
     list.sort((a, b) => (a.date < b.date ? 1 : -1))
@@ -102,7 +99,7 @@ export default function TaskPublish({
   useEffect(() => {
     refreshPublished()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [])
 
   async function togglePublished(entry: { date: string; task: Task }): Promise<void> {
     await window.api.updateTask(entry.date, entry.task.id, { done: !entry.task.done })
@@ -188,12 +185,11 @@ export default function TaskPublish({
       onStatus('该区间内没有可发布的日期')
       return
     }
-    const r = await window.api.publishTasks(dates, [projectId], {
+    const r = await window.api.publishTasks(dates, {
       title: title.trim(),
       tags: selectedTags,
       body,
-      subtasks,
-      projectId
+      subtasks
     })
     onStatus(`已发布到 ${r.count} 个实例`)
     onPublished()

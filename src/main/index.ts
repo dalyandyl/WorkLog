@@ -20,13 +20,6 @@ import {
 } from './tasks'
 import { createTag, deleteTag, listTags, recolorTag, renameTag } from './tags'
 import {
-  createProject,
-  deleteProject,
-  listProjects,
-  recolorProject,
-  renameProject
-} from './projects'
-import {
   addTrashItem,
   clearTrash,
   listTrash,
@@ -157,7 +150,6 @@ interface ExportOptions {
   weekKey?: string
   start?: string
   end?: string
-  projectId?: string
 }
 
 app.whenReady().then(() => {
@@ -196,14 +188,13 @@ app.whenReady().then(() => {
   )
   ipcMain.handle(
     'tasks:publish',
-    async (_event, dates: string[], projectIds: string[], input: NewTaskInput) => {
-      const r = await publishTasks(storageRoot, dates, projectIds, input)
+    async (_event, dates: string[], input: NewTaskInput) => {
+      const r = await publishTasks(storageRoot, dates, input)
       // 记录发布历史（含实例定位，用于整批回收）
       await addPublishRecord(storageRoot, {
         id: crypto.randomUUID(),
         title: input.title.trim() || '未命名任务',
         tags: [...input.tags],
-        projectIds: [...projectIds],
         dates: [...dates],
         body: input.body,
         subtasks: input.subtasks ?? [],
@@ -227,21 +218,6 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('tags:delete', (_event, id: string) => deleteTag(storageRoot, id))
 
-  // ---- 项目 ----
-  ipcMain.handle('projects:list', () => listProjects(storageRoot))
-  ipcMain.handle('projects:create', (_event, name: string, color: string) =>
-    createProject(storageRoot, name, color)
-  )
-  ipcMain.handle('projects:rename', (_event, id: string, name: string) =>
-    renameProject(storageRoot, id, name)
-  )
-  ipcMain.handle('projects:recolor', (_event, id: string, color: string) =>
-    recolorProject(storageRoot, id, color)
-  )
-  ipcMain.handle('projects:delete', (_event, id: string) =>
-    deleteProject(storageRoot, id)
-  )
-
   // ---- 回收站 ----
   ipcMain.handle('trash:list', () => listTrash(storageRoot))
   ipcMain.handle('trash:clear', async () => {
@@ -264,12 +240,12 @@ app.whenReady().then(() => {
     const records = await readPublishRecords(storageRoot)
     const rec = records.find((r) => r.id === id)
     if (!rec) return { ok: false }
-    const trashedTasks: { date: string; projectId: string; task: Task }[] = []
+    const trashedTasks: { date: string; task: Task }[] = []
     for (const inst of rec.instances ?? []) {
       const tasks = await readTasks(storageRoot, inst.date)
       const task = tasks.find((t) => t.id === inst.taskId)
       if (task) {
-        trashedTasks.push({ date: inst.date, projectId: inst.projectId, task })
+        trashedTasks.push({ date: inst.date, task })
         await deleteTask(storageRoot, inst.date, inst.taskId)
       }
     }
@@ -277,7 +253,6 @@ app.whenReady().then(() => {
       await addTrashItem(storageRoot, {
         id: crypto.randomUUID(),
         title: rec.title,
-        projectIds: [...rec.projectIds],
         deletedAt: new Date().toISOString(),
         tasks: trashedTasks
       })
@@ -288,13 +263,13 @@ app.whenReady().then(() => {
 
   // ---- 周报 ----
   ipcMain.handle('weekly:info', (_event, weekKey: string) => getWeekInfoByKey(weekKey))
-  ipcMain.handle('weekly:read', (_event, weekKey: string, projectId: string) =>
-    readWeeklySummary(storageRoot, weekKey, projectId)
+  ipcMain.handle('weekly:read', (_event, weekKey: string) =>
+    readWeeklySummary(storageRoot, weekKey)
   )
   ipcMain.handle(
     'weekly:write',
-    (_event, weekKey: string, projectId: string, summary: string) =>
-      writeWeeklySummary(storageRoot, weekKey, projectId, summary)
+    (_event, weekKey: string, summary: string) =>
+      writeWeeklySummary(storageRoot, weekKey, summary)
   )
   ipcMain.handle('weekly:shift', (_event, weekKey: string, delta: number) =>
     shiftWeekKey(weekKey, delta)
@@ -309,11 +284,11 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_event, s) => writeSettings(storageRoot, s))
 
   // ---- 搜索 / 统计 ----
-  ipcMain.handle('search:tasks', (_event, query: string, projectId?: string) =>
-    searchTasks(storageRoot, query, projectId)
+  ipcMain.handle('search:tasks', (_event, query: string) =>
+    searchTasks(storageRoot, query)
   )
-  ipcMain.handle('stats:range', (_event, start: string, end: string, projectId?: string) =>
-    rangeStats(storageRoot, start, end, projectId)
+  ipcMain.handle('stats:range', (_event, start: string, end: string) =>
+    rangeStats(storageRoot, start, end)
   )
 
   // ---- 发布历史 ----
@@ -385,13 +360,13 @@ app.whenReady().then(() => {
       let defaultName = '日志.md'
 
       if (opts.mode === 'day' && opts.date) {
-        content = await buildDayMarkdown(storageRoot, opts.date, opts.projectId)
+        content = await buildDayMarkdown(storageRoot, opts.date)
         defaultName = `${opts.date}.md`
       } else if (opts.mode === 'week' && opts.weekKey) {
-        content = await buildWeekMarkdown(storageRoot, opts.weekKey, opts.projectId ?? '')
+        content = await buildWeekMarkdown(storageRoot, opts.weekKey)
         defaultName = `周报-${opts.weekKey}.md`
       } else if (opts.mode === 'range' && opts.start && opts.end) {
-        content = await buildRangeMarkdown(storageRoot, opts.start, opts.end, opts.projectId)
+        content = await buildRangeMarkdown(storageRoot, opts.start, opts.end)
         defaultName = `日志-${opts.start}_${opts.end}.md`
       } else {
         return { ok: false, error: '导出参数不完整' }

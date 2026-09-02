@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Project, SearchHit } from '../types'
+import type { SearchHit } from '../types'
 
 interface SearchBoxProps {
   onPick: (date: string, taskId: string) => void
-  projects: Project[]
 }
 
-export default function SearchBox({ onPick, projects }: SearchBoxProps) {
+export default function SearchBox({ onPick }: SearchBoxProps) {
   const [q, setQ] = useState('')
-  const [projectId, setProjectId] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [open, setOpen] = useState(false)
   const timer = useRef<number | null>(null)
@@ -30,14 +28,14 @@ export default function SearchBox({ onPick, projects }: SearchBoxProps) {
       return
     }
     timer.current = window.setTimeout(async () => {
-      const r = await window.api.searchTasks(q, projectId || undefined)
+      const r = await window.api.searchTasks(q)
       setHits(r)
       setOpen(true)
     }, 250)
     return () => {
       if (timer.current !== null) window.clearTimeout(timer.current)
     }
-  }, [q, projectId])
+  }, [q])
 
   function pick(h: SearchHit): void {
     setOpen(false)
@@ -47,19 +45,6 @@ export default function SearchBox({ onPick, projects }: SearchBoxProps) {
 
   return (
     <div className="search-wrap" ref={rootRef}>
-      <select
-        className="search-project"
-        value={projectId}
-        onChange={(e) => setProjectId(e.target.value)}
-        title="按项目过滤"
-      >
-        <option value="">全部项目</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
       <input
         className="search-input"
         placeholder="搜索标题/正文/标签…"

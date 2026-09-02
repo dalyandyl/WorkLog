@@ -7,7 +7,6 @@ import DatePicker from './DatePicker'
 interface DayViewProps {
   date: string
   tags: Tag[]
-  projectId: string
   selectedTaskId: string | null
   onSelectTask: (id: string | null) => void
   onDateChange: (date: string) => void
@@ -19,7 +18,6 @@ interface DayViewProps {
 export default function DayView({
   date,
   tags,
-  projectId,
   selectedTaskId,
   onSelectTask,
   onDateChange,
@@ -37,7 +35,7 @@ export default function DayView({
     setTasks([])
     window.api.readTasks(date).then((all) => {
       if (cancelled) return
-      const filtered = all.filter((t) => t.projectId === projectId)
+      const filtered = all
       setTasks(filtered)
       if (!filtered.some((t) => t.id === selectedTaskId)) {
         onSelectTask(filtered.length > 0 ? filtered[0].id : null)
@@ -50,7 +48,7 @@ export default function DayView({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, projectId])
+  }, [date])
 
   const selected = tasks.find((t) => t.id === selectedTaskId) ?? null
 
