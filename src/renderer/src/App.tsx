@@ -16,7 +16,7 @@ type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash'
 
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
-  const [mode, setMode] = useState<Mode>('publish')
+  const [mode, setMode] = useState<Mode>('day')
   const [weekKey, setWeekKey] = useState(() => weekInfoOf(toDateStr(new Date())).weekKey)
   const [daySel, setDaySel] = useState<{ date: string; taskId: string | null }>({
     date: toDateStr(new Date()),

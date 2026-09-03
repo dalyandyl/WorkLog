@@ -947,6 +947,22 @@ body {
   margin-bottom: 10px;
 }
 
+/* 日报行内编辑模式 */
+.task-edit-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.task-edit-form .md-editor {
+  flex: 1;
+  min-height: 200px;
+}
+
 .task-empty {
   color: var(--muted);
   font-size: 13px;

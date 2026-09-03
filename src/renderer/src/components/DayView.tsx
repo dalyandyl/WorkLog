@@ -3,7 +3,6 @@ import type { Subtask, Tag, Task } from '../types'
 import { weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
 import DatePicker from './DatePicker'
-import Modal from './Modal'
 import TagPicker from './TagPicker'
 import MarkdownEditor from './MarkdownEditor'
 import SubtaskEditor from './SubtaskEditor'
@@ -32,12 +31,13 @@ export default function DayView({
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRest, setIsRest] = useState(false)
 
-  // 编辑态
-  const [editing, setEditing] = useState<Task | null>(null)
+  // 编辑模式（行内，非弹窗）
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editBody, setEditBody] = useState('')
   const [editTags, setEditTags] = useState<string[]>([])
   const [editSubtasks, setEditSubtasks] = useState<Subtask[]>([])
+  const [editNote, setEditNote] = useState('')
 
   const tagMap = new Map(tags.map((t) => [t.id, t]))
 
@@ -52,6 +52,7 @@ export default function DayView({
   useEffect(() => {
     let cancelled = false
     setTasks([])
+    setEditingTask(null)
     window.api.readTasks(date).then((all) => {
       if (cancelled) return
       setTasks(all)
@@ -102,26 +103,32 @@ export default function DayView({
   }
 
   function openEdit(task: Task): void {
-    setEditing(task)
+    setEditingTask(task)
     setEditTitle(task.title)
     setEditBody(task.body)
     setEditTags(task.tags)
     setEditSubtasks(task.subtasks ?? [])
+    setEditNote(task.note ?? '')
+  }
+
+  function cancelEdit(): void {
+    setEditingTask(null)
   }
 
   async function saveEdit(): Promise<void> {
-    if (!editing) return
+    if (!editingTask) return
     if (!editTitle.trim()) {
       onStatus('请填写任务标题')
       return
     }
-    await window.api.updateTask(date, editing.id, {
+    await window.api.updateTask(date, editingTask.id, {
       title: editTitle.trim(),
       body: editBody,
       tags: editTags,
-      subtasks: editSubtasks
+      subtasks: editSubtasks,
+      note: editNote
     })
-    setEditing(null)
+    setEditingTask(null)
     onTasksChanged()
     onStatus('已保存（所有天同步）')
     await loadTasks()
@@ -139,6 +146,8 @@ export default function DayView({
       await loadTasks()
     }
   }
+
+  const isEditing = editingTask !== null && selected !== null && editingTask.id === selected.id
 
   return (
     <div className="day-view">
@@ -217,61 +226,69 @@ export default function DayView({
           </div>
           <div className="day-detail">
             {selected ? (
-              <>
-                <div className="detail-actions">
-                  <button className="ghost-btn" onClick={() => openEdit(selected)} title="编辑任务（所有天同步）">
-                    ✏️ 编辑
-                  </button>
-                  <button className="icon-btn danger" onClick={() => delTask(selected)} title="删除任务（进回收站，所有天同步）">
-                    🗑 删除
-                  </button>
+              isEditing ? (
+                <div className="task-edit-form">
+                  <div className="detail-actions">
+                    <button className="icon-btn primary" onClick={saveEdit} title="保存（所有天同步）">
+                      💾
+                    </button>
+                    <button className="icon-btn" onClick={cancelEdit} title="取消">
+                      ✕
+                    </button>
+                  </div>
+                  <input
+                    className="publish-title"
+                    placeholder="任务标题"
+                    value={editTitle}
+                    autoFocus
+                    onChange={(e) => setEditTitle(e.target.value)}
+                  />
+                  <TagPicker
+                    selectedIds={editTags}
+                    allTags={tags}
+                    onChange={setEditTags}
+                    onGoToTags={onGoToTags}
+                  />
+                  <div className="subtask-editor">
+                    <SubtaskEditor subtasks={editSubtasks} tags={tags} onChange={setEditSubtasks} />
+                  </div>
+                  <div className="task-note">
+                    <div className="task-note-label">📝 备注</div>
+                    <textarea
+                      className="task-note-input"
+                      placeholder="给这个任务简单备注…（保存后随任务在所有天共享）"
+                      value={editNote}
+                      onChange={(e) => setEditNote(e.target.value)}
+                    />
+                  </div>
+                  <div className="publish-body">
+                    <MarkdownEditor
+                      value={editBody}
+                      onChange={setEditBody}
+                      attachFolder="publish"
+                      onStatus={onStatus}
+                    />
+                  </div>
                 </div>
-                <TaskDetail task={selected} date={date} tags={tags} />
-              </>
+              ) : (
+                <>
+                  <div className="detail-actions">
+                    <button className="icon-btn" onClick={() => openEdit(selected)} title="编辑任务（所有天同步）">
+                      ✏️
+                    </button>
+                    <button className="icon-btn danger" onClick={() => delTask(selected)} title="删除任务（进回收站，所有天同步）">
+                      🗑
+                    </button>
+                  </div>
+                  <TaskDetail task={selected} date={date} tags={tags} />
+                </>
+              )
             ) : (
               <div className="task-empty">选择左侧任务查看详情</div>
             )}
           </div>
         </div>
       </div>
-
-      <Modal open={editing !== null} title="编辑任务" width={820} height={560} onClose={() => setEditing(null)}>
-        <div className="publish-form">
-          <input
-            className="publish-title"
-            placeholder="任务标题"
-            value={editTitle}
-            autoFocus
-            onChange={(e) => setEditTitle(e.target.value)}
-          />
-          <TagPicker
-            selectedIds={editTags}
-            allTags={tags}
-            onChange={setEditTags}
-            onGoToTags={onGoToTags}
-          />
-          <div className="subtask-editor">
-            <SubtaskEditor
-              subtasks={editSubtasks}
-              tags={tags}
-              onChange={setEditSubtasks}
-            />
-          </div>
-          <div className="publish-body">
-            <MarkdownEditor
-              value={editBody}
-              onChange={setEditBody}
-              attachFolder="publish"
-              onStatus={onStatus}
-            />
-          </div>
-          <div className="publish-actions">
-            <button className="publish-btn" onClick={saveEdit}>
-              保存
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }
