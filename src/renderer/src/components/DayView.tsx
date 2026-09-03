@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Subtask, Tag, Task } from '../types'
-import { weekdayOf } from '../utils/date'
+import { toDateStr, weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
 import DatePicker from './DatePicker'
 import TagPicker from './TagPicker'
@@ -149,11 +149,23 @@ export default function DayView({
 
   const isEditing = editingTask !== null && selected !== null && editingTask.id === selected.id
 
+  function shiftDate(delta: number): void {
+    const d = new Date(date + 'T00:00:00')
+    d.setDate(d.getDate() + delta)
+    onDateChange(toDateStr(d))
+  }
+
   return (
     <div className="day-view">
       <div className="day-panel">
         <div className="date-heading">
+          <button className="week-nav" onClick={() => shiftDate(-1)} title="前一天">
+            ‹
+          </button>
           <DatePicker value={date} onChange={onDateChange} title="选择日期" />
+          <button className="week-nav" onClick={() => shiftDate(1)} title="后一天">
+            ›
+          </button>
           <span className="weekday">{weekdayOf(date)}</span>
           {tasks.length > 0 ? <span className="badge">已记录</span> : <span className="badge new">未填写</span>}
           <label className="rest-toggle" title="标记为休息日">
@@ -228,7 +240,14 @@ export default function DayView({
             {selected ? (
               isEditing ? (
                 <div className="task-edit-form">
-                  <div className="detail-actions">
+                  <div className="pending-card-head">
+                    <input
+                      className="publish-title"
+                      placeholder="任务标题"
+                      value={editTitle}
+                      autoFocus
+                      onChange={(e) => setEditTitle(e.target.value)}
+                    />
                     <button className="icon-btn primary" onClick={saveEdit} title="保存（所有天同步）">
                       💾
                     </button>
@@ -236,13 +255,6 @@ export default function DayView({
                       ✕
                     </button>
                   </div>
-                  <input
-                    className="publish-title"
-                    placeholder="任务标题"
-                    value={editTitle}
-                    autoFocus
-                    onChange={(e) => setEditTitle(e.target.value)}
-                  />
                   <TagPicker
                     selectedIds={editTags}
                     allTags={tags}
@@ -271,17 +283,13 @@ export default function DayView({
                   </div>
                 </div>
               ) : (
-                <>
-                  <div className="detail-actions">
-                    <button className="icon-btn" onClick={() => openEdit(selected)} title="编辑任务（所有天同步）">
-                      ✏️
-                    </button>
-                    <button className="icon-btn danger" onClick={() => delTask(selected)} title="删除任务（进回收站，所有天同步）">
-                      🗑
-                    </button>
-                  </div>
-                  <TaskDetail task={selected} date={date} tags={tags} />
-                </>
+                <TaskDetail
+                  task={selected}
+                  date={date}
+                  tags={tags}
+                  onEdit={() => openEdit(selected)}
+                  onDelete={() => delTask(selected)}
+                />
               )
             ) : (
               <div className="task-empty">选择左侧任务查看详情</div>

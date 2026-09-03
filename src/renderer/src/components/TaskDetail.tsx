@@ -5,16 +5,32 @@ interface TaskDetailProps {
   task: Task
   date: string
   tags: Tag[]
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
 /** 日报任务详情（默认只读）：标题 + 标签 + 子任务 + 正文 + 派发/完成时间 + 备注 */
-export default function TaskDetail({ task, date, tags }: TaskDetailProps) {
+export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskDetailProps) {
   return (
     <div className="task-detail">
       <div className="task-detail-head">
         <h3 className={'task-title-view' + (task.done ? ' done' : '')}>
           {task.title || '（未命名）'}
         </h3>
+        {onEdit && (
+          <button className="icon-btn" onClick={onEdit} title="编辑任务（所有天同步）">
+            ✏️
+          </button>
+        )}
+        {onDelete && (
+          <button
+            className="icon-btn danger"
+            onClick={onDelete}
+            title="删除任务（进回收站，所有天同步）"
+          >
+            🗑
+          </button>
+        )}
       </div>
       <div className="tag-chips">
         {task.tags.map((id) => {
