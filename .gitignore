@@ -5,3 +5,5 @@ logs/
 *.log
 *.tsbuildinfo
 .DS_Store
+# Gitee 更新令牌配置（含真实令牌，勿提交）
+src/main/updater-config.ts

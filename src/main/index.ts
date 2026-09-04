@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'elect
 import { promises as fs } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
-import { autoUpdater } from 'electron-updater'
 import { getStorageRoot } from './storage'
+import { checkForUpdates, initUpdater, installUpdate } from './updater'
 import { readSettings, writeSettings, isRest, setRest } from './meta'
 import {
   createTask,
@@ -63,32 +63,10 @@ protocol.registerSchemesAsPrivileged([
 
 let isQuitting = false
 
-// 自动更新：仅打包后启用（避免开发模式下因版本/网络问题抛错），后台下载，退出时安装
-if (app.isPackaged) {
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
-}
-
 function broadcastUpdate(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send('update:event', { channel, payload })
   }
-}
-
-function registerUpdaterEvents(): void {
-  autoUpdater.on('checking-for-update', () => broadcastUpdate('checking', {}))
-  autoUpdater.on('update-available', (info) => broadcastUpdate('available', { version: info.version }))
-  autoUpdater.on('update-not-available', () => broadcastUpdate('not-available', {}))
-  autoUpdater.on('download-progress', (p) =>
-    broadcastUpdate('progress', {
-      percent: Math.round(p.percent),
-      transferred: p.transferred,
-      total: p.total,
-      bytesPerSecond: p.bytesPerSecond
-    })
-  )
-  autoUpdater.on('update-downloaded', (info) => broadcastUpdate('downloaded', { version: info.version }))
-  autoUpdater.on('error', (err) => broadcastUpdate('error', { message: err?.message ?? String(err) }))
 }
 
 function appIconPath(): string {
@@ -470,10 +448,8 @@ app.whenReady().then(async () => {
   startReminder(storageRoot)
   createWindow()
 
-  // ---- 自动更新（仅打包后监听事件） ----
-  if (app.isPackaged) {
-    registerUpdaterEvents()
-  }
+  // ---- 自动更新（Gitee 发行版附件，运行时经 API 校验令牌与仓库配置） ----
+  initUpdater(broadcastUpdate)
   ipcMain.handle('app:getInfo', () => ({
     appVersion: app.getVersion(),
     electron: process.versions.electron,
@@ -483,21 +459,8 @@ app.whenReady().then(async () => {
     arch: process.arch,
     packaged: app.isPackaged
   }))
-  ipcMain.handle('update:check', async () => {
-    if (!app.isPackaged) {
-      return { ok: false, message: '开发模式下无法检查更新，请使用打包后的安装程序' }
-    }
-    try {
-      await autoUpdater.checkForUpdates()
-      return { ok: true }
-    } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
-    }
-  })
-  ipcMain.handle('update:install', () => {
-    autoUpdater.quitAndInstall()
-    return { ok: true }
-  })
+  ipcMain.handle('update:check', () => checkForUpdates())
+  ipcMain.handle('update:install', () => installUpdate())
 
   // ---- WebDAV 跨设备同步 ----
   async function syncWithResult(which: 'push' | 'pull'): Promise<{ ok: boolean; error?: string }> {

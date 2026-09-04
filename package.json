@@ -8,24 +8,28 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/lqh/worklog.git"
+    "url": "https://gitee.com/dadalia1/worklog.git"
   },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win",
+    "publish:gitee": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-gitee.ps1"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
-    "electron-updater": "^6.8.9"
+    "js-yaml": "^4.1.0",
+    "semver": "^7.7.3"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",

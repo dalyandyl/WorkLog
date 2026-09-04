@@ -3,18 +3,23 @@ productName: 日志工具
 directories:
   buildResources: build
   output: dist
-# 自动更新发布渠道（GitHub Releases）：发布前请将 owner/repo 改为真实仓库，
-# 并在打包/发布时设置 GH_TOKEN 环境变量。
+# 更新元数据生成配置：运行时更新由 src/main/updater.ts 直接调用 Gitee API（发行版附件），
+# 并不使用 electron-updater 或本 publish 配置；此处保留 generic publish 仅为了让
+# electron-builder 在构建时生成 latest.yml（显式 channel: latest，避免 -beta 版本号
+# 被自动推导为 beta 通道而生成 beta.yml）。
+# 实际发布动作由 scripts/publish-gitee.ps1 通过 Gitee API 完成（创建发行版 + 上传附件）。
 publish:
-  provider: github
-  owner: lqh
-  repo: worklog
+  provider: generic
+  url: https://gitee.com/dadalia1/worklog/releases
+  channel: latest
 # 主进程/预加载只用到 electron 与 Node 内置模块，渲染层已由 vite 完整打包，
 # 因此只需携带 out 产物与 package.json，安装包体积更小。
 files:
   - out/**
   - package.json
 asar: true
+# 打包后精简体积（裁剪 Electron 语言包等），保持安装包 < 100MB（Gitee 发行版附件上限）
+afterPack: scripts/after-pack.js
 # 运行时窗口/托盘图标：复制到 resources 供主进程读取
 extraResources:
   - from: build/icon.png
