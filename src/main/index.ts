@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'elect
 import { promises as fs } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
-import { getStorageRoot } from './storage'
-import { checkForUpdates, initUpdater, installUpdate } from './updater'
+import { getStorageRoot, migrateStorageRoot } from './storage'
+import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater'
 import { readSettings, writeSettings, isRest, setRest } from './meta'
 import {
   createTask,
@@ -153,8 +153,11 @@ app.whenReady().then(async () => {
 
   app.setAppUserModelId('com.worklog.app')
 
-  // 日志存储根目录：打包后 = 安装目录/logs；开发中 = 项目目录/logs
+  // 日志存储根目录：打包后 = %APPDATA%/WorkLog/logs（持久目录）；开发中 = 项目目录/logs
   const storageRoot = getStorageRoot()
+
+  // 打包版首次启动：把更新前备份 / 旧安装目录里的 logs 迁移到持久目录（防止更新清空数据）
+  await migrateStorageRoot()
 
   // 一次性迁移旧版本数据（旧标签/周报/发布记录/日报直建任务）
   await migrateLegacyData(storageRoot)
@@ -473,6 +476,7 @@ app.whenReady().then(async () => {
     packaged: app.isPackaged
   }))
   ipcMain.handle('update:check', () => checkForUpdates())
+  ipcMain.handle('update:download', () => downloadUpdate())
   ipcMain.handle('update:install', () => installUpdate())
 
   // ---- WebDAV 跨设备同步 ----

@@ -170,88 +170,83 @@ function parseTagVersion(tag: string): string | null {
   return semver.valid(v) ? v : null
 }
 
+interface UpdatePlan {
+  release: GiteeRelease
+  installerAtt: GiteeAttachment
+  file: UpdateFileInfo
+  remoteVersion: string
+  fileName: string
+}
+
+/**
+ * 解析「本次可更新」计划：拉取最新发行版 -> 解析 latest.yml -> 版本比较。
+ * 返回 null 表示无更新（无发行版或版本不比当前高）；配置/解析异常会抛错。
+ */
+async function getUpdatePlan(): Promise<UpdatePlan | null> {
+  const { owner, repo, token } = UPDATE_CONFIG
+  if (!owner || !repo || !token) {
+    throw new Error('未配置 Gitee 更新仓库/令牌（src/main/updater-config.ts）')
+  }
+
+  const release = await getLatestRelease()
+  if (!release) return null
+
+  const attachments = await listAttachments(release.id)
+  const ymlAtt = attachments.find((a) => a.name === 'latest.yml')
+  if (!ymlAtt) {
+    throw new Error('最新发行版缺少 latest.yml，请使用 scripts/publish-gitee.ps1 发布')
+  }
+
+  const ymlText = await downloadLatestYml(release.id, ymlAtt.id)
+  let info: LatestYml | null = null
+  try {
+    info = yaml.load(ymlText) as LatestYml
+  } catch {
+    /* fallthrough */
+  }
+  if (!info || typeof info !== 'object') throw new Error('latest.yml 解析失败')
+
+  const remoteVersion = String(info.version || parseTagVersion(release.tag_name) || '')
+  if (!semver.valid(remoteVersion)) {
+    throw new Error(`发行版版本号无效：${remoteVersion}`)
+  }
+
+  const current = app.getVersion()
+  if (!semver.gt(remoteVersion, current)) return null
+
+  // 取安装包文件名（electron-builder 生成的 latest.yml 使用 files[0].url）
+  const file: UpdateFileInfo = (info.files && info.files[0]) || {
+    url: info.path || '',
+    sha512: info.sha512
+  }
+  const fileName = path.basename(file.url || '')
+  if (!fileName) throw new Error('latest.yml 中缺少安装包文件名')
+  const installerAtt = attachments.find((a) => a.name === fileName)
+  if (!installerAtt) {
+    throw new Error(`发行版缺少安装包附件：${fileName}`)
+  }
+
+  return { release, installerAtt, file, remoteVersion, fileName }
+}
+
 // ---------------- 对外接口 ----------------
 
 /**
- * 检查更新：拉取最新发行版 -> 解析 latest.yml -> 版本比较 -> 自动下载安装包并校验。
- * 与旧 electron-updater 行为保持一致：available 后自动下载，事件通过广播发给渲染层。
+ * 检查更新：仅检测并广播 available/not-available，不自动下载。
+ * 由渲染层弹窗询问用户是否更新，确认后再调用 downloadUpdate()。
  */
 export async function checkForUpdates(): Promise<{ ok: boolean; message?: string }> {
   if (!app.isPackaged) {
     return { ok: false, message: '开发模式下无法检查更新，请使用打包后的安装程序' }
   }
-  const { owner, repo, token } = UPDATE_CONFIG
-  if (!owner || !repo || !token) {
-    return { ok: false, message: '未配置 Gitee 更新仓库/令牌（src/main/updater-config.ts）' }
-  }
-
   broadcast('checking', {})
   try {
-    const release = await getLatestRelease()
-    if (!release) {
+    const plan = await getUpdatePlan()
+    if (!plan) {
       broadcast('not-available', {})
       return { ok: true }
     }
-
-    const attachments = await listAttachments(release.id)
-    const ymlAtt = attachments.find((a) => a.name === 'latest.yml')
-    if (!ymlAtt) {
-      throw new Error('最新发行版缺少 latest.yml，请使用 scripts/publish-gitee.ps1 发布')
-    }
-
-    const ymlText = await downloadLatestYml(release.id, ymlAtt.id)
-    let info: LatestYml | null = null
-    try {
-      info = yaml.load(ymlText) as LatestYml
-    } catch {
-      /* fallthrough */
-    }
-    if (!info || typeof info !== 'object') throw new Error('latest.yml 解析失败')
-
-    const remoteVersion = String(info.version || parseTagVersion(release.tag_name) || '')
-    if (!semver.valid(remoteVersion)) {
-      throw new Error(`发行版版本号无效：${remoteVersion}`)
-    }
-
-    const current = app.getVersion()
-    if (!semver.gt(remoteVersion, current)) {
-      broadcast('not-available', {})
-      return { ok: true }
-    }
-
-    broadcast('available', { version: remoteVersion })
-
-    // 取安装包文件名（electron-builder 生成的 latest.yml 使用 files[0].url）
-    const file: UpdateFileInfo = (info.files && info.files[0]) || {
-      url: info.path || '',
-      sha512: info.sha512
-    }
-    const fileName = path.basename(file.url || '')
-    if (!fileName) throw new Error('latest.yml 中缺少安装包文件名')
-    const installerAtt = attachments.find((a) => a.name === fileName)
-    if (!installerAtt) {
-      throw new Error(`发行版缺少安装包附件：${fileName}`)
-    }
-
-    await fs.mkdir(updateDir, { recursive: true })
-    const dest = path.join(updateDir, fileName)
-    const { sha512 } = await downloadAttachment(release.id, installerAtt.id, dest, (percent) => {
-      broadcast('progress', { percent })
-    })
-
-    if (file.sha512 && sha512 !== file.sha512) {
-      await fs.unlink(dest).catch(() => {})
-      throw new Error('安装包校验失败（sha512 不匹配），已删除损坏文件')
-    }
-
-    const state: UpdateState = {
-      version: remoteVersion,
-      installer: dest,
-      downloadedAt: new Date().toISOString()
-    }
-    await fs.writeFile(path.join(updateDir, 'state.json'), JSON.stringify(state, null, 2), 'utf-8')
-
-    broadcast('downloaded', { version: remoteVersion })
+    broadcast('available', { version: plan.remoteVersion })
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -261,8 +256,49 @@ export async function checkForUpdates(): Promise<{ ok: boolean; message?: string
 }
 
 /**
- * 安装已下载的更新：静默运行 NSIS 安装器（--updated /S --force-run，与 electron-updater 一致），
- * 然后立即退出应用，安装器完成安装后自动重启新版本。
+ * 下载已确认的更新：流式下载安装包 -> sha512 校验 -> 保存状态 -> 广播 downloaded。
+ */
+export async function downloadUpdate(): Promise<{ ok: boolean; message?: string }> {
+  if (!app.isPackaged) {
+    return { ok: false, message: '开发模式下无法下载更新，请使用打包后的安装程序' }
+  }
+  try {
+    const plan = await getUpdatePlan()
+    if (!plan) {
+      broadcast('not-available', {})
+      return { ok: true }
+    }
+
+    await fs.mkdir(updateDir, { recursive: true })
+    const dest = path.join(updateDir, plan.fileName)
+    const { sha512 } = await downloadAttachment(plan.release.id, plan.installerAtt.id, dest, (percent) => {
+      broadcast('progress', { percent })
+    })
+
+    if (plan.file.sha512 && sha512 !== plan.file.sha512) {
+      await fs.unlink(dest).catch(() => {})
+      throw new Error('安装包校验失败（sha512 不匹配），已删除损坏文件')
+    }
+
+    const state: UpdateState = {
+      version: plan.remoteVersion,
+      installer: dest,
+      downloadedAt: new Date().toISOString()
+    }
+    await fs.writeFile(path.join(updateDir, 'state.json'), JSON.stringify(state, null, 2), 'utf-8')
+
+    broadcast('downloaded', { version: plan.remoteVersion })
+    return { ok: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    broadcast('error', { message })
+    return { ok: false, message }
+  }
+}
+
+/**
+ * 安装已下载的更新：启动 NSIS 安装器（--updated --force-run，去掉静默 /S，
+ * 让安装程序界面正常显示），然后立即退出应用，由安装器接管并自动重启新版本。
  */
 export async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
   try {
@@ -274,7 +310,7 @@ export async function installUpdate(): Promise<{ ok: boolean; message?: string }
     const stat = await fs.stat(state.installer).catch(() => null)
     if (!stat || !stat.isFile()) throw new Error('更新安装包不存在，请重新检查更新')
 
-    const child = spawn(state.installer, ['--updated', '/S', '--force-run'], {
+    const child = spawn(state.installer, ['--updated', '--force-run'], {
       detached: true,
       stdio: 'ignore'
     })

@@ -37,3 +37,5 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
+  # 更新前备份旧版 <安装目录>/logs，避免卸载器 RMDir /r 清空日志数据
+  include: build/nsis-preserve-logs.nsh

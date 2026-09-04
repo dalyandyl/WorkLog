@@ -36,6 +36,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
   } | null>(null)
   const [updText, setUpdText] = useState('')
   const [updStatus, setUpdStatus] = useState('')
+  const [updPercent, setUpdPercent] = useState<number | undefined>(undefined)
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
     setShowWebdav(false)
     setUpdText('')
     setUpdStatus('')
+    setUpdPercent(undefined)
     setChecking(false)
     window.api.getAppInfo().then(setInfo)
     const off = window.api.onUpdateEvent(({ channel, payload }) => {
@@ -52,17 +54,19 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
         setUpdText('正在检查更新…')
         setUpdStatus('checking')
       } else if (channel === 'available') {
-        setUpdText(`发现新版本 v${p.version}，正在下载…`)
+        setUpdText(`发现新版本 v${p.version}，是否立即下载更新？`)
         setUpdStatus('available')
+        setChecking(false)
       } else if (channel === 'not-available') {
         setUpdText('已是最新版本')
         setUpdStatus('none')
         setChecking(false)
       } else if (channel === 'progress') {
         setUpdText(`正在下载更新 ${p.percent}%`)
+        setUpdPercent(Number(p.percent ?? 0))
         setUpdStatus('progress')
       } else if (channel === 'downloaded') {
-        setUpdText(`新版本 v${p.version} 已下载，重启后生效`)
+        setUpdText(`新版本 v${p.version} 已下载，请重启安装`)
         setUpdStatus('downloaded')
         setChecking(false)
       } else if (channel === 'error') {
@@ -118,6 +122,21 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
       setUpdStatus('error')
       setChecking(false)
     }
+  }
+  async function startDownload(): Promise<void> {
+    setUpdPercent(0)
+    setUpdText('正在下载更新…')
+    setUpdStatus('progress')
+    const r = await window.api.downloadUpdate()
+    if (!r.ok) {
+      setUpdText(r.message ?? '下载更新失败')
+      setUpdStatus('error')
+    }
+  }
+  function declineUpdate(): void {
+    setUpdText('')
+    setUpdStatus('')
+    setUpdPercent(undefined)
   }
   function install(): void {
     void window.api.installUpdate()
@@ -264,16 +283,41 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                 <div className="about-row"><span>Electron</span><span>{info?.electron ?? '…'}</span></div>
                 <div className="about-row"><span>Chromium</span><span>{info?.chrome ?? '…'}</span></div>
                 <div className="about-row"><span>Node.js</span><span>{info?.node ?? '…'}</span></div>
-                <div className="about-row"><span>系统</span><span>{info ? `${info.platform} / ${info.arch}` : '…'}</span></div>
               </div>
               <div className="about-update">
-                <button className="ghost-btn" onClick={check} disabled={checking}>
-                  {checking ? '检查中…' : '🔄 检查更新'}
-                </button>
-                {updStatus === 'downloaded' && (
-                  <button className="ghost-btn" onClick={install}>立即重启安装</button>
+                <div className="about-update-actions">
+                  {updStatus === '' ||
+                  updStatus === 'checking' ||
+                  updStatus === 'none' ||
+                  updStatus === 'error' ? (
+                    <button className="ghost-btn" onClick={check} disabled={checking}>
+                      {checking ? '检查中…' : '🔄 检查更新'}
+                    </button>
+                  ) : null}
+                  {updStatus === 'available' && (
+                    <>
+                      <button className="ghost-btn" onClick={startDownload}>
+                        立即更新
+                      </button>
+                      <button className="ghost-btn" onClick={declineUpdate}>
+                        暂不更新
+                      </button>
+                    </>
+                  )}
+                  {updStatus === 'downloaded' && (
+                    <button className="ghost-btn" onClick={install}>立即重启安装</button>
+                  )}
+                </div>
+                {updText && (
+                  <div className={'about-update-text' + (updStatus === 'error' ? ' error' : '')}>
+                    {updText}
+                  </div>
                 )}
-                {updText && <div className="about-update-text">{updText}</div>}
+                {updStatus === 'progress' && updPercent !== undefined && (
+                  <div className="about-progress">
+                    <div className="about-progress-fill" style={{ width: `${updPercent}%` }} />
+                  </div>
+                )}
                 {info && !info.packaged && (
                   <div className="about-update-text error">当前为开发模式，检查更新仅在打包安装后可用</div>
                 )}

@@ -136,6 +136,8 @@ const api = {
   }> => ipcRenderer.invoke('app:getInfo'),
   checkUpdate: (): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke('update:check'),
+  downloadUpdate: (): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke('update:download'),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:install'),
 
   // ---- 报表导出 ----

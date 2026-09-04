@@ -103,6 +103,7 @@ export interface WorkLogApi {
     packaged: boolean
   }>
   checkUpdate(): Promise<{ ok: boolean; message?: string }>
+  downloadUpdate(): Promise<{ ok: boolean; message?: string }>
   installUpdate(): Promise<{ ok: boolean }>
   onUpdateEvent(cb: (data: { channel: string; payload: Record<string, unknown> }) => void): () => void
 
