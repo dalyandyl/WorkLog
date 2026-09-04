@@ -4,7 +4,7 @@
 
 - 技术栈：Electron + Vite + React 19 + TypeScript + TipTap 3（富文本编辑器）+ KaTeX（数学公式）
 - 运行平台：Windows 10/11（64 位）
-- 数据存储：本地明文文件（任务 JSON + 正文 + 附件）。开发模式存于项目 `logs/`；打包安装后存于 `%APPDATA%/WorkLog/logs`（更新前自动备份迁移，防止清空）
+- 数据存储：本地明文文件（任务 JSON + 正文 + 附件）。开发模式存于项目 `logs/`；打包安装后存于 `%APPDATA%/WorkLog/logs`（更新前自动备份迁移，防止清空）。
 
 ## 环境要求
 
