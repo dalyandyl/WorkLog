@@ -155,3 +155,6 @@ worklog/
   - 版本号比已安装版本高才会提示更新（如 `1.2.0` > `1.2.0-beta`）。
   - 安装包未做代码签名，静默安装可能触发 Windows SmartScreen 提示，属正常现象。
   - 若日后需更换令牌，改 `updater-config.ts` 后重新打包安装即可。
+- **源码与回滚**：代码已推送至同一私密仓库 `dadalia1/worklog`（`origin/master`），每个版本对应一个 git tag（如 `v1.2.0-beta`、`v1.1.0-beta`）。
+  - 回滚到某版本的**源码**：`git fetch origin && git checkout v1.2.0-beta`
+  - 回滚到某版本的**安装包**：到 Gitee 发行版页面（`/releases`）下载对应版本附件，或从本地 `dist/` 查找。
