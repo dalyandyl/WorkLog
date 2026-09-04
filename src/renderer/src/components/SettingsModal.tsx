@@ -38,6 +38,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
   const [updStatus, setUpdStatus] = useState('')
   const [updPercent, setUpdPercent] = useState<number | undefined>(undefined)
   const [checking, setChecking] = useState(false)
+  const [storageRoot, setStorageRoot] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -48,6 +49,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
     setUpdPercent(undefined)
     setChecking(false)
     window.api.getAppInfo().then(setInfo)
+    window.api.getStorageRoot().then(setStorageRoot)
     const off = window.api.onUpdateEvent(({ channel, payload }) => {
       const p = payload as Record<string, unknown>
       if (channel === 'checking') {
@@ -212,6 +214,10 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                 <button className="settings-btn" onClick={doRestore}>导入备份</button>
               </div>
               <div className="settings-hint">导出为 zip 压缩包，可在其它设备导入恢复</div>
+              <div className="settings-label">日志存放目录：</div>
+              <div className="storage-path" title={storageRoot}>
+                {storageRoot || '…'}
+              </div>
             </div>
           )}
 

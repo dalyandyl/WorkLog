@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toDateStr } from '../utils/date'
 import { holidayInfoOf, isRestDay, loadHolidayYear, refreshHolidayYear } from '../utils/holidays'
+import DatePicker from './DatePicker'
 
 interface CalendarProps {
   selected: string
@@ -79,9 +80,13 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
         <button className="cal-nav" onClick={() => shiftMonth(-1)} title="上个月">
           ‹
         </button>
-        <div className="cal-title">
-          {view.year} 年 {view.month + 1} 月
-        </div>
+        <DatePicker
+          portal
+          value={`${view.year}-${String(view.month + 1).padStart(2, '0')}-01`}
+          onChange={onSelect}
+          label={`${view.year} 年 ${view.month + 1} 月`}
+          title="点击选择日期（年 / 月 / 日）"
+        />
         <button className="cal-nav" onClick={() => shiftMonth(1)} title="下个月">
           ›
         </button>

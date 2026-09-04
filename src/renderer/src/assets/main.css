@@ -3521,6 +3521,27 @@ input {
   font-size: 13px;
 }
 
+/* 侧边栏日历标题 = 日期选择器触发按钮（点击标题可做年 / 月 / 日选择，弹出层经 portal 渲染到 body） */
+.sidebar .cal-head .dp-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  color: var(--text);
+  box-shadow: none;
+  transition: background 0.15s ease;
+}
+
+.sidebar .cal-head .dp-btn:hover {
+  background: var(--bg);
+}
+
+.sidebar .cal-head .dp-btn .dp-icon {
+  display: none;
+}
+
 .sidebar .cal-foot-btns .today-btn {
   font-size: 10px;
   padding: 4px 4px;
