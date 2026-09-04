@@ -1,15 +1,16 @@
-// 自动更新（Gitee 发行版 / Releases 附件方案）
+// 自动更新（Gitee / GitHub 双通道镜像源）
 //
-// 背景：Gitee 不提供 electron-updater 官方发布源，且私密仓库的网页 raw 下载
-// 必须登录（会话 cookie），令牌 query/header 均无效。实测可用的是 Gitee API v5：
-//   - GET /repos/{owner}/{repo}/releases/latest        -> 最新发行版（含附件名）
-//   - GET /repos/{owner}/{repo}/releases/{id}/attach_files -> 附件列表（含 id）
+// 背景：Gitee 不提供 electron-updater 官方发布源，实测可用的是 Gitee API v5：
+//   - GET /repos/{owner}/{repo}/releases/latest            -> 最新发行版（含附件名）
+//   - GET /repos/{owner}/{repo}/releases/{id}/attach_files  -> 附件列表（含 id）
 //   - GET /repos/{owner}/{repo}/releases/{id}/attach_files/{fileId}/download
-//                                                    -> 附件内容（带 access_token）
-// 因此本模块自行实现「检测 -> 下载 -> 校验 -> 安装」全流程，与渲染层事件保持兼容。
+//                                                        -> 附件内容（带 access_token）
+// GitHub 公开仓库可直接用 Releases API + 附件直链（免令牌）：
+//   - GET https://api.github.com/repos/{owner}/{repo}/releases/latest
+//   - 附件直链 https://github.com/{owner}/{repo}/releases/download/{tag}/{file}
 //
-// 发布侧：scripts/publish-gitee.ps1 构建后用 Gitee API 创建发行版并上传附件
-// （latest.yml + setup.exe）。
+// 用户可在设置页选择镜像源（自动 / Gitee / GitHub）；「自动」= Gitee 优先，
+// 失败或无结果时回退 GitHub。检测 -> 下载 -> 校验 -> 安装 全流程与渲染层事件兼容。
 import { app, net } from 'electron'
 import { createWriteStream } from 'fs'
 import { promises as fs } from 'fs'
@@ -19,21 +20,9 @@ import { spawn } from 'child_process'
 import yaml from 'js-yaml'
 import semver from 'semver'
 import { UPDATE_CONFIG } from './updater-config'
+import type { UpdateSource } from '../shared/types'
 
 export type UpdateBroadcast = (channel: string, payload: unknown) => void
-
-interface GiteeRelease {
-  id: number
-  tag_name: string
-  name?: string | null
-  assets?: { name: string; browser_download_url: string }[]
-}
-
-interface GiteeAttachment {
-  id: number
-  name: string
-  size?: number
-}
 
 interface UpdateFileInfo {
   url: string
@@ -49,14 +38,48 @@ interface LatestYml {
   releaseDate?: string
 }
 
+interface GiteeRelease {
+  id: number
+  tag_name: string
+  name?: string | null
+}
+
+interface GiteeAttachment {
+  id: number
+  name: string
+  size?: number
+}
+
+interface GithubRelease {
+  tag_name: string
+  assets?: { name: string; browser_download_url: string }[]
+}
+
+/** 已解析出的可下载计划：Gitee/GitHub 统一为「直链 + sha512」 */
+interface UpdatePlan {
+  remoteVersion: string
+  fileName: string
+  installerUrl: string
+  sha512?: string
+}
+
 interface UpdateState {
   version: string
   installer: string
   downloadedAt: string
 }
 
+type ChannelId = 'gitee' | 'github'
+
 let broadcast: UpdateBroadcast = () => {}
 let updateDir = ''
+
+/** 当前生效的镜像源（由设置页切换，持久化在 settings.json） */
+let currentSource: UpdateSource = 'auto'
+
+export function setUpdateSource(source: UpdateSource): void {
+  currentSource = source
+}
 
 /** 注册更新事件广播（由主进程在窗口创建后调用） */
 export function initUpdater(cb: UpdateBroadcast): void {
@@ -64,37 +87,56 @@ export function initUpdater(cb: UpdateBroadcast): void {
   updateDir = path.join(app.getPath('temp'), 'worklog-update')
 }
 
-// ---------------- Gitee API ----------------
+// ---------------- 配置 ----------------
 
-function apiUrl(pathname: string): string {
-  const sep = pathname.includes('?') ? '&' : '?'
-  return `https://gitee.com/api/v5${pathname}${sep}access_token=${encodeURIComponent(UPDATE_CONFIG.token)}`
+function channelCfg(id: ChannelId): { owner: string; repo: string; token: string } {
+  const c = (UPDATE_CONFIG as Record<string, { owner?: string; repo?: string; token?: string }>)[id]
+  return { owner: c?.owner ?? '', repo: c?.repo ?? '', token: c?.token ?? '' }
 }
 
-async function apiGet<T>(pathname: string): Promise<T> {
-  const res = await net.fetch(apiUrl(pathname))
-  if (!res.ok) {
-    let detail = ''
-    try {
-      detail = (await res.text()).slice(0, 200)
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`Gitee API HTTP ${res.status}：${detail || res.statusText}`)
+// ---------------- 公共解析 ----------------
+
+function parseTagVersion(tag: string): string | null {
+  const v = tag.replace(/^v/i, '')
+  return semver.valid(v) ? v : null
+}
+
+function parseLatestYml(text: string): LatestYml {
+  let info: LatestYml | null = null
+  try {
+    info = yaml.load(text) as LatestYml
+  } catch {
+    /* fallthrough */
   }
-  return (await res.json()) as T
+  if (!info || typeof info !== 'object') throw new Error('latest.yml 解析失败')
+  return info
 }
 
-/** 流式下载附件到本地，返回 { filePath, sha512 }（sha512 为 base64） */
-async function downloadAttachment(
-  releaseId: number,
-  attachmentId: number,
+/** 从 latest.yml 取安装包文件名（electron-builder 生成的 latest.yml 使用 files[0].url） */
+function installerFromYml(info: LatestYml): { fileName: string; sha512?: string } {
+  const file: UpdateFileInfo = (info.files && info.files[0]) || {
+    url: info.path || '',
+    sha512: info.sha512
+  }
+  const fileName = path.basename(file.url || '')
+  if (!fileName) throw new Error('latest.yml 中缺少安装包文件名')
+  return { fileName, sha512: file.sha512 }
+}
+
+/** 比较远端版本是否高于当前安装版本；版本号非法则抛错 */
+function isNewer(remoteVersion: string): boolean {
+  if (!semver.valid(remoteVersion)) throw new Error(`发行版版本号无效：${remoteVersion}`)
+  return semver.gt(remoteVersion, app.getVersion())
+}
+
+// ---------------- 流式下载（两通道共用） ----------------
+
+async function streamDownload(
+  url: string,
   dest: string,
   onProgress?: (percent: number) => void
-): Promise<{ filePath: string; sha512: string }> {
-  const res = await net.fetch(
-    apiUrl(`/repos/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/${releaseId}/attach_files/${attachmentId}/download`)
-  )
+): Promise<string> {
+  const res = await net.fetch(url)
   if (!res.ok) {
     let detail = ''
     try {
@@ -136,97 +178,184 @@ async function downloadAttachment(
     writer.destroy()
     throw err
   }
-  return { filePath: dest, sha512: hash.digest('base64') }
+  return hash.digest('base64')
 }
 
-async function getLatestRelease(): Promise<GiteeRelease | null> {
+// ---------------- Gitee 通道 ----------------
+
+function giteeApiUrl(pathname: string): string {
+  const token = channelCfg('gitee').token
+  const sep = pathname.includes('?') ? '&' : '?'
+  return `https://gitee.com/api/v5${pathname}${sep}access_token=${encodeURIComponent(token)}`
+}
+
+async function giteeApiGet<T>(pathname: string): Promise<T> {
+  const res = await net.fetch(giteeApiUrl(pathname))
+  if (!res.ok) {
+    let detail = ''
+    try {
+      detail = (await res.text()).slice(0, 200)
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`Gitee API HTTP ${res.status}：${detail || res.statusText}`)
+  }
+  return (await res.json()) as T
+}
+
+async function giteeFetchText(url: string): Promise<string> {
+  const res = await net.fetch(url)
+  if (!res.ok) throw new Error(`下载 latest.yml 失败 HTTP ${res.status}`)
+  return res.text()
+}
+
+async function giteeGetPlan(): Promise<UpdatePlan | null> {
+  const { owner, repo, token } = channelCfg('gitee')
+  if (!owner || !repo || !token) {
+    throw new Error('未配置 Gitee 更新仓库/令牌（src/main/updater-config.ts）')
+  }
+
+  let release: GiteeRelease
   try {
-    return await apiGet<GiteeRelease>(
-      `/repos/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/latest`
-    )
+    release = await giteeApiGet<GiteeRelease>(`/repos/${owner}/${repo}/releases/latest`)
   } catch (err) {
     // 404 = 还没有任何发行版 -> 视为「无更新」
     if (err instanceof Error && /404/.test(err.message)) return null
     throw err
   }
-}
 
-async function listAttachments(releaseId: number): Promise<GiteeAttachment[]> {
-  return apiGet<GiteeAttachment[]>(
-    `/repos/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/${releaseId}/attach_files`
+  const attachments = await giteeApiGet<GiteeAttachment[]>(
+    `/repos/${owner}/${repo}/releases/${release.id}/attach_files`
   )
-}
-
-async function downloadLatestYml(releaseId: number, attachmentId: number): Promise<string> {
-  const res = await net.fetch(
-    apiUrl(`/repos/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/${releaseId}/attach_files/${attachmentId}/download`)
-  )
-  if (!res.ok) throw new Error(`下载 latest.yml 失败 HTTP ${res.status}`)
-  return res.text()
-}
-
-function parseTagVersion(tag: string): string | null {
-  const v = tag.replace(/^v/i, '')
-  return semver.valid(v) ? v : null
-}
-
-interface UpdatePlan {
-  release: GiteeRelease
-  installerAtt: GiteeAttachment
-  file: UpdateFileInfo
-  remoteVersion: string
-  fileName: string
-}
-
-/**
- * 解析「本次可更新」计划：拉取最新发行版 -> 解析 latest.yml -> 版本比较。
- * 返回 null 表示无更新（无发行版或版本不比当前高）；配置/解析异常会抛错。
- */
-async function getUpdatePlan(): Promise<UpdatePlan | null> {
-  const { owner, repo, token } = UPDATE_CONFIG
-  if (!owner || !repo || !token) {
-    throw new Error('未配置 Gitee 更新仓库/令牌（src/main/updater-config.ts）')
-  }
-
-  const release = await getLatestRelease()
-  if (!release) return null
-
-  const attachments = await listAttachments(release.id)
   const ymlAtt = attachments.find((a) => a.name === 'latest.yml')
   if (!ymlAtt) {
     throw new Error('最新发行版缺少 latest.yml，请使用 scripts/publish-gitee.ps1 发布')
   }
 
-  const ymlText = await downloadLatestYml(release.id, ymlAtt.id)
-  let info: LatestYml | null = null
-  try {
-    info = yaml.load(ymlText) as LatestYml
-  } catch {
-    /* fallthrough */
-  }
-  if (!info || typeof info !== 'object') throw new Error('latest.yml 解析失败')
-
+  const info = parseLatestYml(
+    await giteeFetchText(
+      giteeApiUrl(
+        `/repos/${owner}/${repo}/releases/${release.id}/attach_files/${ymlAtt.id}/download`
+      )
+    )
+  )
   const remoteVersion = String(info.version || parseTagVersion(release.tag_name) || '')
-  if (!semver.valid(remoteVersion)) {
-    throw new Error(`发行版版本号无效：${remoteVersion}`)
-  }
+  if (!isNewer(remoteVersion)) return null
 
-  const current = app.getVersion()
-  if (!semver.gt(remoteVersion, current)) return null
-
-  // 取安装包文件名（electron-builder 生成的 latest.yml 使用 files[0].url）
-  const file: UpdateFileInfo = (info.files && info.files[0]) || {
-    url: info.path || '',
-    sha512: info.sha512
-  }
-  const fileName = path.basename(file.url || '')
-  if (!fileName) throw new Error('latest.yml 中缺少安装包文件名')
+  const { fileName, sha512 } = installerFromYml(info)
   const installerAtt = attachments.find((a) => a.name === fileName)
   if (!installerAtt) {
     throw new Error(`发行版缺少安装包附件：${fileName}`)
   }
 
-  return { release, installerAtt, file, remoteVersion, fileName }
+  return {
+    remoteVersion,
+    fileName,
+    installerUrl: giteeApiUrl(
+      `/repos/${owner}/${repo}/releases/${release.id}/attach_files/${installerAtt.id}/download`
+    ),
+    sha512
+  }
+}
+
+// ---------------- GitHub 通道 ----------------
+
+async function githubApiJson(url: string): Promise<unknown> {
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json' }
+  const token = channelCfg('github').token
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await net.fetch(url, { headers })
+  if (!res.ok) {
+    let detail = ''
+    try {
+      detail = (await res.text()).slice(0, 200)
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`GitHub API HTTP ${res.status}：${detail || res.statusText}`)
+  }
+  return res.json()
+}
+
+async function githubGetPlan(): Promise<UpdatePlan | null> {
+  const { owner, repo } = channelCfg('github')
+  if (!owner || !repo) {
+    throw new Error('未配置 GitHub 更新仓库（src/main/updater-config.ts）')
+  }
+
+  let release: GithubRelease
+  try {
+    release = (await githubApiJson(
+      `https://api.github.com/repos/${owner}/${repo}/releases/latest`
+    )) as GithubRelease
+  } catch (err) {
+    // 404 = 还没有任何发行版 -> 视为「无更新」
+    if (err instanceof Error && /404/.test(err.message)) return null
+    throw err
+  }
+
+  const assets = release.assets ?? []
+  const ymlAsset = assets.find((a) => a.name === 'latest.yml')
+  if (!ymlAsset) {
+    throw new Error('最新发行版缺少 latest.yml，请先发布 GitHub Release')
+  }
+
+  const ymlRes = await net.fetch(ymlAsset.browser_download_url)
+  if (!ymlRes.ok) throw new Error(`下载 latest.yml 失败 HTTP ${ymlRes.status}`)
+  const info = parseLatestYml(await ymlRes.text())
+
+  const remoteVersion = String(info.version || parseTagVersion(release.tag_name) || '')
+  if (!isNewer(remoteVersion)) return null
+
+  const { fileName, sha512 } = installerFromYml(info)
+  const installerAsset = assets.find((a) => a.name === fileName)
+  if (!installerAsset) {
+    throw new Error(`发行版缺少安装包附件：${fileName}`)
+  }
+
+  return {
+    remoteVersion,
+    fileName,
+    installerUrl: installerAsset.browser_download_url,
+    sha512
+  }
+}
+
+// ---------------- 源选择与统一入口 ----------------
+
+function channelsFor(source: UpdateSource): { id: ChannelId; getPlan: () => Promise<UpdatePlan | null> }[] {
+  switch (source) {
+    case 'gitee':
+      return [{ id: 'gitee', getPlan: giteeGetPlan }]
+    case 'github':
+      return [{ id: 'github', getPlan: githubGetPlan }]
+    default: // auto
+      return [
+        { id: 'gitee', getPlan: giteeGetPlan },
+        { id: 'github', getPlan: githubGetPlan }
+      ]
+  }
+}
+
+/**
+ * 按当前镜像源解析「本次可更新」计划。
+ * - 单源：该源出错则抛错；无更新返回 null。
+ * - 自动：按 Gitee -> GitHub 依次尝试；命中即返回；全部无更新返回 null；全部出错抛最后错误。
+ */
+async function resolveUpdatePlan(): Promise<{ plan: UpdatePlan | null; source: ChannelId | null }> {
+  const chains = channelsFor(currentSource)
+  let lastError: Error | null = null
+  for (const ch of chains) {
+    try {
+      const plan = await ch.getPlan()
+      if (plan) return { plan, source: ch.id }
+      lastError = null // 该源确认无更新，正常继续尝试下一个源
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+  if (lastError) throw lastError
+  return { plan: null, source: null }
 }
 
 // ---------------- 对外接口 ----------------
@@ -241,12 +370,12 @@ export async function checkForUpdates(): Promise<{ ok: boolean; message?: string
   }
   broadcast('checking', {})
   try {
-    const plan = await getUpdatePlan()
+    const { plan, source } = await resolveUpdatePlan()
     if (!plan) {
       broadcast('not-available', {})
       return { ok: true }
     }
-    broadcast('available', { version: plan.remoteVersion })
+    broadcast('available', { version: plan.remoteVersion, source })
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -263,7 +392,7 @@ export async function downloadUpdate(): Promise<{ ok: boolean; message?: string 
     return { ok: false, message: '开发模式下无法下载更新，请使用打包后的安装程序' }
   }
   try {
-    const plan = await getUpdatePlan()
+    const { plan } = await resolveUpdatePlan()
     if (!plan) {
       broadcast('not-available', {})
       return { ok: true }
@@ -271,11 +400,11 @@ export async function downloadUpdate(): Promise<{ ok: boolean; message?: string 
 
     await fs.mkdir(updateDir, { recursive: true })
     const dest = path.join(updateDir, plan.fileName)
-    const { sha512 } = await downloadAttachment(plan.release.id, plan.installerAtt.id, dest, (percent) => {
+    const sha512 = await streamDownload(plan.installerUrl, dest, (percent) => {
       broadcast('progress', { percent })
     })
 
-    if (plan.file.sha512 && sha512 !== plan.file.sha512) {
+    if (plan.sha512 && sha512 !== plan.sha512) {
       await fs.unlink(dest).catch(() => {})
       throw new Error('安装包校验失败（sha512 不匹配），已删除损坏文件')
     }

@@ -12,12 +12,34 @@
 #   GH_REPO   仓库名（如 worklog）
 #
 # 用法：npm run publish:github
+#   自定义发布说明：npm run publish:github -- -Message "自定义备注"
+#   （不传 -Message 时自动读取 CHANGELOG.md 中对应版本的章节；都没有则用默认文案）
 # 依赖：Node.js/npm、Windows 10 1803+（自带 curl.exe）
 # =====================================================================
+param(
+  # 可选：自定义发布说明（优先级：命令行 -Message 参数 > CHANGELOG.md > 默认文案）
+  [string]$Message = ''
+)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+# 发布说明：-Message 参数 > CHANGELOG.md 对应版本章节 > 默认文案
+function Get-ReleaseNotes([string]$Version) {
+  if ($Message) { return $Message }
+  $changelog = Join-Path $root 'CHANGELOG.md'
+  if (Test-Path $changelog) {
+    $text = [IO.File]::ReadAllText($changelog, [Text.Encoding]::UTF8)
+    $pattern = "(?ms)^##\s*\[?v?" + [regex]::Escape($Version) + "\]?(?![-\w.])\s*(?:-\s*[^\r\n]*)?\r?\n(.+?)(?=^##\s|\z)"
+    $m = [regex]::Match($text, $pattern)
+    if ($m.Success) {
+      $notes = $m.Groups[1].Value.Trim()
+      if ($notes) { return $notes }
+    }
+  }
+  return "日志工具 v$Version 自动更新发布"
+}
 
 # ---- 配置：环境变量 ----
 $token = $env:GH_TOKEN
@@ -113,7 +135,7 @@ if ($release) {
   $body = @{
     tag_name = $tag
     name = "$($pkg.name) $version"
-    body = "日志工具 v$version 自动更新发布。`n`n（由 scripts/publish-github.ps1 自动生成）"
+    body = (Get-ReleaseNotes -Version $version)
     target_commitish = 'master'
     draft = $false
     prerelease = $false

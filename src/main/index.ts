@@ -3,8 +3,9 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 import { getStorageRoot, migrateStorageRoot } from './storage'
-import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater'
+import { checkForUpdates, downloadUpdate, initUpdater, installUpdate, setUpdateSource } from './updater'
 import { readSettings, writeSettings, isRest, setRest } from './meta'
+import type { UpdateSource } from '../shared/types'
 import {
   createTask,
   datesOfTask,
@@ -312,7 +313,11 @@ app.whenReady().then(async () => {
     setRest(storageRoot, date, rest)
   )
   ipcMain.handle('settings:get', () => readSettings(storageRoot))
-  ipcMain.handle('settings:set', (_event, s) => writeSettings(storageRoot, s))
+  ipcMain.handle('settings:set', async (_event, s) => {
+    await writeSettings(storageRoot, s)
+    // 设置变化时同步应用更新镜像源（如设置页切换了镜像源）
+    if (s && typeof s.updateSource === 'string') setUpdateSource(s.updateSource)
+  })
 
   // ---- 搜索 / 统计 ----
   ipcMain.handle('search:tasks', (_event, query: string) =>
@@ -464,8 +469,11 @@ app.whenReady().then(async () => {
   startReminder(storageRoot)
   createWindow()
 
-  // ---- 自动更新（Gitee 发行版附件，运行时经 API 校验令牌与仓库配置） ----
+  // ---- 自动更新（Gitee / GitHub 双通道，运行时经 API 校验令牌与仓库配置） ----
   initUpdater(broadcastUpdate)
+  // 应用设置里保存的更新镜像源（auto / gitee / github）
+  const initSettings = await readSettings(storageRoot)
+  setUpdateSource(initSettings.updateSource)
   ipcMain.handle('app:getInfo', () => ({
     appVersion: app.getVersion(),
     electron: process.versions.electron,
@@ -478,6 +486,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('update:check', () => checkForUpdates())
   ipcMain.handle('update:download', () => downloadUpdate())
   ipcMain.handle('update:install', () => installUpdate())
+  ipcMain.handle('update:set-source', (_event, source: UpdateSource) => {
+    setUpdateSource(source)
+    return { ok: true }
+  })
 
   // ---- WebDAV 跨设备同步 ----
   async function syncWithResult(which: 'push' | 'pull'): Promise<{ ok: boolean; error?: string }> {

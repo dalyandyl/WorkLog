@@ -158,12 +158,11 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
         <button className="ghost-btn" onClick={() => setShowAdd(true)}>
           ➕ 添加标签
         </button>
-        <span className="muted tag-manager-tip">重命名或删除会联动所有任务</span>
       </div>
 
       <input
         className="tag-search"
-        placeholder="搜索标签名称…"
+        placeholder="搜索标签…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />

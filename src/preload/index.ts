@@ -10,6 +10,7 @@ import type {
   Task,
   TaskPatch,
   TrashItem,
+  UpdateSource,
   WeekInfo,
   WeeklySummary
 } from '../shared/types'
@@ -139,6 +140,8 @@ const api = {
   downloadUpdate: (): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke('update:download'),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:install'),
+  setUpdateSource: (source: UpdateSource): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('update:set-source', source),
 
   // ---- 报表导出 ----
   exportReportMd: (

@@ -33,7 +33,8 @@ export default function App() {
       autoMode: 'off',
       intervalMinutes: 30,
       lastSyncAt: null
-    }
+    },
+    updateSource: 'auto'
   })
   const [tags, setTags] = useState<Tag[]>([])
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set())

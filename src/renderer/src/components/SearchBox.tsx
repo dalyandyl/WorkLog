@@ -47,7 +47,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
     <div className="search-wrap" ref={rootRef}>
       <input
         className="search-input"
-        placeholder="搜索标题/正文/标签…"
+        placeholder="搜索任务..."
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => {

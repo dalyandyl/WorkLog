@@ -27,7 +27,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoMode: 'off',
     intervalMinutes: 30,
     lastSyncAt: null
-  }
+  },
+  updateSource: 'auto'
 }
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
@@ -60,7 +61,8 @@ export async function readSettings(root: string): Promise<AppSettings> {
       autoMode: s.webdav?.autoMode ?? DEFAULT_SETTINGS.webdav.autoMode,
       intervalMinutes: s.webdav?.intervalMinutes ?? DEFAULT_SETTINGS.webdav.intervalMinutes,
       lastSyncAt: s.webdav?.lastSyncAt ?? DEFAULT_SETTINGS.webdav.lastSyncAt
-    }
+    },
+    updateSource: s.updateSource ?? DEFAULT_SETTINGS.updateSource
   }
 }
 

@@ -14,14 +14,36 @@
 # 用法：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-gitee.ps1
 #   （或 npm run publish:gitee）
+#   自定义发布说明：npm run publish:gitee -- -Message "自定义备注"
+#   （不传 -Message 时自动读取 CHANGELOG.md 中对应版本的章节；都没有则用默认文案）
 #
 # 依赖：Node.js/npm、Windows PowerShell 5.1+（自带）或 PowerShell 7+。
 # =====================================================================
+param(
+  # 可选：自定义发布说明（优先级：命令行 -Message 参数 > CHANGELOG.md > 默认文案）
+  [string]$Message = ''
+)
 $ErrorActionPreference = 'Stop'
 # PowerShell 7+ 下避免原生命令（npm 等）写 stderr 警告被当作终止错误
 $PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+# 发布说明：-Message 参数 > CHANGELOG.md 对应版本章节 > 默认文案
+function Get-ReleaseNotes([string]$Version) {
+  if ($Message) { return $Message }
+  $changelog = Join-Path $root 'CHANGELOG.md'
+  if (Test-Path $changelog) {
+    $text = [IO.File]::ReadAllText($changelog, [Text.Encoding]::UTF8)
+    $pattern = "(?ms)^##\s*\[?v?" + [regex]::Escape($Version) + "\]?(?![-\w.])\s*(?:-\s*[^\r\n]*)?\r?\n(.+?)(?=^##\s|\z)"
+    $m = [regex]::Match($text, $pattern)
+    if ($m.Success) {
+      $notes = $m.Groups[1].Value.Trim()
+      if ($notes) { return $notes }
+    }
+  }
+  return "日志工具 v$Version 自动更新发布"
+}
 
 function Read-ConfigValue([string]$file, [string]$key) {
   if (-not (Test-Path $file)) { return $null }
@@ -107,7 +129,7 @@ if ($release) {
     access_token = $token
     tag_name = $tag
     name = "$($pkg.name) $version"
-    body = "日志工具 v$version 自动更新发布。`n`n（由 scripts/publish-gitee.ps1 自动生成）"
+    body = (Get-ReleaseNotes -Version $version)
     target_commitish = 'master'
     prerelease = $false
   }

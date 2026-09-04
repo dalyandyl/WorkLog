@@ -14,6 +14,7 @@ export type {
   TrashItem,
   TrashedTask,
   ThemeSetting,
+  UpdateSource,
   WebdavConfig,
   WeekInfo,
   WeeklySummary

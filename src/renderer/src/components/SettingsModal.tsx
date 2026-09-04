@@ -56,7 +56,9 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
         setUpdText('正在检查更新…')
         setUpdStatus('checking')
       } else if (channel === 'available') {
-        setUpdText(`发现新版本 v${p.version}，是否立即下载更新？`)
+        const srcLabel =
+          p.source === 'gitee' ? 'Gitee 源' : p.source === 'github' ? 'GitHub 源' : ''
+        setUpdText(`发现新版本 v${p.version}${srcLabel ? `（${srcLabel}）` : ''}，是否立即下载更新？`)
         setUpdStatus('available')
         setChecking(false)
       } else if (channel === 'not-available') {
@@ -289,6 +291,23 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                 <div className="about-row"><span>Electron</span><span>{info?.electron ?? '…'}</span></div>
                 <div className="about-row"><span>Chromium</span><span>{info?.chrome ?? '…'}</span></div>
                 <div className="about-row"><span>Node.js</span><span>{info?.node ?? '…'}</span></div>
+              </div>
+              <div className="settings-row">
+                <label className="settings-label">选择镜像源：</label>
+                <select
+                  className="gran-select"
+                  value={settings.updateSource}
+                  onChange={(e) => {
+                    const v = e.target.value as AppSettings['updateSource']
+                    onChange({ ...settings, updateSource: v })
+                    void window.api.setUpdateSource(v)
+                  }}
+                  title="选择「检查更新」从哪个平台下载安装包"
+                >
+                  <option value="auto">自动（Gitee 优先）</option>
+                  <option value="gitee">Gitee</option>
+                  <option value="github">GitHub</option>
+                </select>
               </div>
               <div className="about-update">
                 <div className="about-update-actions">

@@ -2,6 +2,9 @@
 
 export type ThemeSetting = 'light' | 'dark' | 'system'
 
+/** 自动更新镜像源：auto=自动（Gitee 优先，失败回退 GitHub）/ gitee / github */
+export type UpdateSource = 'auto' | 'gitee' | 'github'
+
 export interface ReminderSetting {
   enabled: boolean
   time: string // 'HH:MM'
@@ -23,6 +26,8 @@ export interface AppSettings {
   theme: ThemeSetting
   reminder: ReminderSetting
   webdav: WebdavConfig
+  /** 自动更新镜像源 */
+  updateSource: UpdateSource
 }
 
 /** 标签（全局标签库） */

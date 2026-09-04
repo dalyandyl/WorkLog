@@ -9,6 +9,7 @@ import type {
   Task,
   TaskPatch,
   TrashItem,
+  UpdateSource,
   WeekInfo,
   WeeklySummary
 } from '../shared/types'
@@ -105,6 +106,7 @@ export interface WorkLogApi {
   checkUpdate(): Promise<{ ok: boolean; message?: string }>
   downloadUpdate(): Promise<{ ok: boolean; message?: string }>
   installUpdate(): Promise<{ ok: boolean }>
+  setUpdateSource(source: UpdateSource): Promise<{ ok: boolean }>
   onUpdateEvent(cb: (data: { channel: string; payload: Record<string, unknown> }) => void): () => void
 
   // 报表导出
