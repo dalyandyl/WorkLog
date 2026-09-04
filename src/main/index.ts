@@ -122,11 +122,22 @@ function createWindow(): void {
 function showWindow(): void {
   const win = BrowserWindow.getAllWindows()[0]
   if (win) {
+    if (win.isMinimized()) win.restore()
     win.show()
     win.focus()
   } else {
     createWindow()
   }
+}
+
+// 单实例锁：桌面再次双击 exe 或重复运行时，只聚焦已有窗口，不启动第二个进程
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    showWindow()
+  })
 }
 
 interface ExportOptions {
@@ -138,6 +149,8 @@ interface ExportOptions {
 }
 
 app.whenReady().then(async () => {
+  if (!gotTheLock) return // 第二个实例：已在上面请求退出，不再初始化任何东西
+
   app.setAppUserModelId('com.worklog.app')
 
   // 日志存储根目录：打包后 = 安装目录/logs；开发中 = 项目目录/logs

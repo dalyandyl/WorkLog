@@ -1,6 +1,6 @@
 {
   "name": "worklog",
-  "version": "1.2.0-beta",
+  "version": "1.4.0-beta",
   "description": "个人日志管理工具（Windows 桌面应用）",
   "main": "./out/main/index.js",
   "author": "LHQ",

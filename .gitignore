@@ -7,3 +7,6 @@ logs/
 .DS_Store
 # Gitee æ›´æ–°ä»¤ç‰Œé…ç½®ï¼ˆå«çœŸå®ä»¤ç‰Œï¼Œå‹¿æäº¤ï¼‰
 src/main/updater-config.ts
+
+# ÊÓ¾õ¹¤¾ßÁÙÊ±²úÎï
+.dsh-vision-router/

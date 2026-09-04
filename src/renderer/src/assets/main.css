@@ -3813,10 +3813,12 @@ input {
   opacity: 0.72;
 }
 
-/* 自适应窗口 */
+/* 自适应窗口
+   注意：overflow 不能用 hidden，否则会裁掉向下溢出的搜索下拉气泡（search-results）。
+   用 overflow-x: clip 只裁水平方向（窄窗口时页签不溢出），垂直方向保持可见。 */
 .topbar {
   flex-wrap: nowrap;
-  overflow: hidden;
+  overflow-x: clip;
 }
 
 .mode-switch {
