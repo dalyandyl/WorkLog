@@ -1,10 +1,10 @@
 # 日志工具（WorkLog）
 
-个人日志管理工具：以「任务清单」为核心记录每天/每周工作，支持彩色标签、论坛式富文本正文（字体颜色/字号/下划线/公式/代码块/图片/多附件）、任务发布与周报汇总，可导出 Markdown。
+个人日志管理工具：以「任务清单」为核心记录每天/每周工作，支持彩色标签、论坛式富文本正文（字体颜色/字号/下划线/公式/代码块/图片/多附件）、任务发布与周报汇总，可导出 Markdown / Word。
 
 - 技术栈：Electron + Vite + React 19 + TypeScript + TipTap 3（富文本编辑器）+ KaTeX（数学公式）
 - 运行平台：Windows 10/11（64 位）
-- 数据存储：本地明文文件（任务 JSON + HTML 正文 + 附件），保存在「安装目录/logs」下
+- 数据存储：本地明文文件（任务 JSON + 正文 + 附件）。开发模式存于项目 `logs/`；打包安装后存于 `%APPDATA%/WorkLog/logs`（更新前自动备份迁移，防止清空）
 
 ## 环境要求
 
@@ -37,9 +37,11 @@
 4. 其它命令：
 
    ```bash
-   npm run build      # 构建产物到 out/
-   npm run typecheck  # TypeScript 类型检查
-   npm run dist       # 打包 Windows 安装包（setup.exe 输出到 dist/）
+   npm run build        # 构建产物到 out/
+   npm run typecheck    # TypeScript 类型检查
+   npm run dist         # 打包 Windows 安装包（setup.exe 输出到 dist/）
+   npm run publish:gitee    # 构建 + 打包 + 发布到 Gitee（软件内更新走此源）
+   npm run publish:github   # 构建 + 打包 + 发布到 GitHub（镜像源）
    ```
 
 ## 功能总览
@@ -55,33 +57,9 @@
 - **跨设备同步**：内置 **WebDAV** 同步（如坚果云），一键上传/下载、可设**自动同步**（启动拉取/退出上传/定时）、显示最近同步时间、下载前**冲突提示**。
 - **Markdown 正文**：纯 Markdown 源码编辑（无工具栏，仅图片/附件按钮，支持粘贴/拖拽图片）；**右键菜单**可快速加粗/删除线/插入代码块/列表。
 - **日历**：按年联网同步法定节假日，手动刷新。
-- **关于与更新**：系统信息 + 作者 LHQ + 检查更新（Gitee 发行版自动更新）。
+- **关于与更新**：系统信息 + 作者 LHQ + 检查更新（Gitee / GitHub **双镜像源**自动更新，可在设置中选择镜像源）。
 
-> 旧版本（v1.3.0-fail）的「项目结构层级」功能已整体取消；旧数据中的 projectId 字段保留但忽略，启动时自动迁移兼容旧任务。
-
-## 日志数据存放位置
-
-- **开发模式**：项目目录下的 `logs/` 文件夹（已加入 `.gitignore`）。
-- **打包安装后**：程序安装目录下的 `logs/` 文件夹。
-
-```
-logs/
-├── .migrated-v1.2          # 旧数据迁移完成标记
-├── tags.json                # 标签库 [{id, name, color, createdAt}]
-├── rest.json                # 休息日标记
-├── settings.json            # 主题、提醒、WebDAV 自动同步设置
-├── publish-history.json     # 任务发布历史（含实例定位）
-├── trash.json               # 临时回收站
-├── projects.json            # 旧版遗留（项目层级已取消，忽略）
-├── 2026/
-│   └── 2026-08-31.json      # 每日任务清单（正文为 Markdown，旧数据兼容 HTML）
-├── weekly/
-│   └── 2026-W36.json        # 周报（周总结）
-└── attachments/
-    └── 2026-08-31/          # 图片与文件附件（按日期/周/publish 归档）
-```
-
-> v2 → v3：正文从 Markdown 改为 HTML 存储（支持字体颜色/字号/公式等富文本）。旧 v2 数据不迁移，建议清空 `logs/` 重新开始。
+> 旧版本的「项目结构层级」功能已整体取消；旧数据中的 projectId 字段保留但忽略，启动时自动迁移兼容旧任务。
 
 ## 目录结构
 
@@ -105,6 +83,9 @@ worklog/
 │   │   ├── sync.ts      # WebDAV 上传/下载、本地修改检测
 │   │   ├── trash.ts     # 临时回收站
 │   │   ├── attachments.ts  # 附件存储与 wlattach:// 解析
+│   │   ├── updater.ts   # 自动更新（Gitee / GitHub 双通道：检测→下载→校验→安装）
+│   │   ├── updater-config.ts        # 更新仓库/令牌配置（.gitignore 忽略）
+│   │   ├── updater-config.example.ts # 配置模板
 │   │   └── tray.ts      # 托盘 + 每日提醒
 │   ├── preload/         # 安全桥接层
 │   └── renderer/src/
@@ -120,44 +101,36 @@ worklog/
 │           ├── TagPicker.tsx / TagManager.tsx / TrashView.tsx
 │           ├── RichView.tsx / SearchBox.tsx / DatePicker.tsx
 │           ├── Calendar.tsx / SettingsModal.tsx / Drawer.tsx / Modal.tsx
+├── scripts/
+│   ├── publish-gitee.ps1    # 发布到 Gitee 的自动化脚本
+│   ├── publish-github.ps1   # 发布到 GitHub 的自动化脚本
+│   └── after-pack.js        # 打包后精简体积（裁剪 Electron 语言包）
+├── CHANGELOG.md        # 更新日志（自动作为 Release 发布备注）
 ├── electron.vite.config.ts
 ├── electron-builder.yml
 └── package.json
 ```
 
-## 功能进度
+## 自动更新（Gitee / GitHub 双镜像源）
 
-- [x] v1：日报富文本 + 周报汇总 + 标签/搜索/统计/深色模式 + 附件 + 备份 + 提醒托盘
-- [x] v2：日报任务清单模式 + 全局标签库 + 任务发布 + 独立周报
-- [x] v3：TipTap 论坛式编辑器（HTML 存储/公式/代码高亮/图片附件多选）+ 详情两态（只读/编辑/保存）+ 发布历史 + 三处日期选择器 + 区间统计 + 卡片化 UI
-- [x] v3.1：日报白色面板容器 + 新建即编辑 + 图标按钮（悬浮提示）+ 工具栏铺满 + 去编辑器黄框 + 标签管理两态 + 统计标签卡片 + 发布弹窗/历史详情抽屉 + 周报任务详情抽屉 + 日期选择器圆润美化
-- [x] v3.2：工具栏间距优化 + 正文固定宽度自适应换行（去横向滚动）+ 任务编辑 ✕ 取消（切走=丢弃）+ 周报任务卡片化与悬停反馈 + 标签添加弹窗化 + 全站自定义日历弹窗（DatePicker 组件）
-- [x] v3.3：日历支持年/月/日三级选择 + 标签+按钮恢复小 chip 样式 + 发布/添加按钮改虚线描边并移至标题旁 + 黄框三重修复（caret-line-highlight:none 等）+ 新建任务默认空（未编辑即取消不落盘）+ 标签管理加宽 + 统计每日任务量纵坐标
-- [x] v3.4：正文改 Markdown 存储（tiptap-markdown + markdown-it）+ 标签搜索与重名禁止 + 统计柱顶数量/月度点击选月/区间限当月 + 发布粒度（日/周/月/年）与历史搜索 + 标题必填 + 按钮胶囊化与图标灰度 + 左侧日历法定节假日（2025/2026）
-- [x] v3.5：子任务功能（Task.subtasks 全链路：列表内嵌/详情/周报/发布/导出/搜索）+ 日历节假日按年实时同步（联网拉取）+ 回到今天跨月修复 + 输入框失效防御（按模式强制重挂载）+ 标签行卡片分隔 + 发布历史单击预览/卡片化/粒度时间段筛选
-- [x] v3.6：发布区间简化为单日/区间 + 日历「联网更新日历」按钮 + 关于系统弹窗（版本/作者 LHQ/检查更新）+ electron-updater 线上更新（GitHub Releases）
-- [x] v3.7（1.1.0）：编辑器全部改为纯 Markdown 源码编辑（无工具栏，仅图片/附件按钮）+ 标签重名弹窗提示 + 新增日志报表（日/周/月/年粒度，汇总+明细，实时预览，导出 MD/PDF）+ 周报总结弹窗化 + 程序名「日志工具」+ 自定义图标
-- [x] v1.2.0-beta（项目层级版本，已废弃）：项目层级结构等 —— 已整体取消
-- [x] v1.2.0-beta：**取消项目层级**（全链去除 projectId）+ 区间派发共享状态与完成时间修正 + 日报只读/派发完成时间/备注 + 完成任务置灰+对勾 + 批量多任务派发 + 发布历史内编辑删除 + 删除进回收站 + 报表粒度下拉与时间显示 + 周报时间显示 + 标签创建时间/使用次数 + WebDAV 完善（自动同步/同步时间/冲突提示）+ 旧数据自动迁移 + 编辑器右键加粗/删除线/代码块/列表
-- [x] v1.4.0-beta：修复顶部全局搜索下拉气泡被顶栏裁剪遮挡 + 单实例（重复双击 exe 只聚焦已有窗口，不再启动第二个程序）
-- [x] v1.4.1-beta：更新流程改为「检测到新版本先弹窗确认 → 下载带进度条 → 重启安装显示安装程序界面」；修复更新后日志数据被清空（数据目录由安装目录迁至 `%APPDATA%/WorkLog/logs`，更新前自动备份迁移）；关于系统界面去掉「系统」行
-- [x] v1.4.1（当前）：设置 → 数据备份显示日志存放目录；主界面左侧日历点击「年份 月」标题可弹年月日选择器快速跳转日期
-- [x] M5：打包 setup.exe 安装程序（`npm run dist`，产物在 `dist/`）
-- [x] M6：线上自动更新（Gitee 发行版附件，私密仓库）：设置 → 关于系统 → 检查更新，检测→下载→校验→静默安装重启全自动；发布走 `npm run publish:gitee`
-
-## 自动更新（Gitee 发行版）
-
-- **原理**：运行时主进程直接调用 **Gitee API v5**，从私有仓库 `dadalia1/worklog` 的**发行版**拉取 `latest.yml` 与安装包附件（Gitee 不支持 electron-updater 官方发布源，且私有仓库网页下载需登录，故自行实现）。
-- **配置**：仓库/令牌在 `src/main/updater-config.ts`（已被 .gitignore 忽略，含真实令牌，勿提交；模板见 `updater-config.example.ts`）。令牌会打包进安装程序，供运行时下载用——**私密仓库必须带令牌才能下载**，对个人私用可接受。
-- **发布新版本**：
-  1. 确认 `package.json` 的 `version`（如 `1.2.0`）；
-  2. 运行 `npm run publish:gitee`（或手动执行 `scripts/publish-gitee.ps1`）。脚本会：构建 → 打包 NSIS → 在 Gitee 创建/更新发行版 `v<版本号>` → 上传 `latest.yml` + `setup.exe`；
-  3. 用户端打开应用 → 设置 → 关于系统 → 🔄 检查更新，即可自动下载并安装。
-- **令牌获取**：Gitee → 头像 → 设置 → 私人令牌 → 生成（勾选 `projects` 权限即可）。发布脚本会优先读环境变量 `GITEE_TOKEN`，否则读 `updater-config.ts`。
+- **原理**：主进程自行实现「检测 → 下载 → sha512 校验 → 安装」，支持两个下载源：
+  - **Gitee**：调用 Gitee API v5，从仓库 `dadalia1/worklog` 的**发行版**拉取 `latest.yml` 与安装包附件（需令牌）。
+  - **GitHub**：调用 GitHub Releases API，从仓库 `dalyandyl/WorkLog` 的**发行版**拉取（公开仓库免令牌，附件直链下载）。
+- **镜像源选择**：设置 → 关于系统 →「更新镜像源」下拉，可选 **自动 / Gitee / GitHub**。自动 = Gitee 优先，失败或无结果自动回退 GitHub。选择会保存到设置，重启后仍生效。
+- **配置**：仓库/令牌在 `src/main/updater-config.ts`（已被 .gitignore 忽略，含真实令牌，勿提交；模板见 `updater-config.example.ts`）。
+- **发布新版本**（两端同步发布）：
+  1. 升级 `package.json` 的 `version`（如 `1.4.2`）；
+  2. 在 `CHANGELOG.md` 顶部按版本号新增章节（发布脚本会自动读取该章节作为 Release 备注；也可用 `npm run publish:xxx -- -Message "备注"` 临时指定）；
+  3. `npm run publish:gitee` —— 构建 → 打包 NSIS → 创建/更新 Gitee 发行版 `v<版本号>` → 上传 `latest.yml` + `setup.exe`；
+  4. `npm run publish:github` —— 同上发布到 GitHub；
+  5. 打标签：`git tag -a v<版本> -m "说明"` 并推送两端（作为回滚锚点）。
+- **令牌**：
+  - Gitee：`src/main/updater-config.ts`（或环境变量 `GITEE_TOKEN`，勾 `projects` 权限即可）；
+  - GitHub：环境变量 `GH_TOKEN`（classic 令牌，勾 `repo` 权限，发布 Release 用；公开仓库运行时免令牌）。
 - **注意事项**：
-  - 版本号比已安装版本高才会提示更新（如 `1.2.0` > `1.2.0-beta`）。
-  - 安装包未做代码签名，静默安装可能触发 Windows SmartScreen 提示，属正常现象。
-  - 若日后需更换令牌，改 `updater-config.ts` 后重新打包安装即可。
-- **源码与回滚**：代码已推送至同一私密仓库 `dadalia1/worklog`（`origin/master`），每个版本对应一个 git tag（如 `v1.2.0-beta`、`v1.1.0-beta`）。
-  - 回滚到某版本的**源码**：`git fetch origin && git checkout v1.2.0-beta`
-  - 回滚到某版本的**安装包**：到 Gitee 发行版页面（`/releases`）下载对应版本附件，或从本地 `dist/` 查找。
+  - 版本号比已安装版本高才会提示更新。
+  - 安装包未做代码签名，Windows SmartScreen 提示属正常现象。
+  - 两端需发布同名版本的 `latest.yml` 与安装包；若某一端未发布，对应镜像源会提示无更新。
+- **源码与回滚**：源码已推送 gitee（`origin/master`）与 github（`github/master`），每个版本对应一个 git tag（如 `v1.4.2`）。
+  - 回滚到某版本的**源码**：`git fetch --all && git checkout v1.4.1`
+  - 回滚到某版本的**安装包**：到对应平台发行版页（`/releases`）下载旧版本附件。
