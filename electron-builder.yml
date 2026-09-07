@@ -16,6 +16,8 @@ publish:
   provider: generic
   url: https://gitee.com/dadalia1/worklog/releases
   channel: latest
+# 最大压缩级别：安装包需 < 100MB（Gitee 发行版附件上限），1.4.3 起默认即开启
+compression: maximum
 # 主进程/预加载只用到 electron 与 Node 内置模块，渲染层已由 vite 完整打包，
 # 因此只需携带 out 产物与 package.json，安装包体积更小。
 files:
