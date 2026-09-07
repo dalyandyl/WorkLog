@@ -64,3 +64,15 @@ export function attachmentUrlToPath(root: string, url: string): string | null {
     return null
   }
 }
+
+/** 删除附件文件（仅允许落在 attachments 目录内） */
+export async function deleteAttachmentFile(root: string, url: string): Promise<boolean> {
+  const filePath = attachmentUrlToPath(root, url)
+  if (!filePath) return false
+  try {
+    await fs.unlink(filePath)
+    return true
+  } catch {
+    return false
+  }
+}

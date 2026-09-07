@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   ExportOptions,
+  Meeting,
   MonthStats,
   NewTaskInput,
   PublishRecord,
@@ -92,6 +93,16 @@ export interface WorkLogApi {
     error?: string
   }>
   openAttachment(url: string): Promise<{ ok: boolean; error?: string }>
+  deleteAttachment(url: string): Promise<{ ok: boolean; error?: string }>
+
+  // 会议纪要
+  listMeetings(): Promise<Meeting[]>
+  saveMeeting(meeting: Meeting): Promise<{ ok: boolean }>
+  deleteMeeting(id: string): Promise<{ ok: boolean }>
+  saveMeetingAttachment(meetingId: string, name: string, buf: ArrayBuffer): Promise<string>
+  exportMeeting(
+    meeting: Meeting
+  ): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
 
   // 系统信息 / 更新
   getAppInfo(): Promise<{

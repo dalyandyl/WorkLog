@@ -1,5 +1,9 @@
 appId: com.worklog.app
 productName: 日志工具
+# Electron 二进制下载镜像（打包阶段 electron-builder 拉取 electron 压缩包走国内镜像；
+# npm install 阶段的镜像由环境变量 ELECTRON_MIRROR 提供，见 scripts/set-mirrors.ps1）
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
 directories:
   buildResources: build
   output: dist
