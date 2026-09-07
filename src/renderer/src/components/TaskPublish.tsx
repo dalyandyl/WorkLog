@@ -427,7 +427,8 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
               {query.trim() ? '没有匹配的发布记录' : '该时间段暂无发布记录'}
             </div>
           ) : (
-            filteredHistory.map((rec) => (
+            <div className="publish-history-list">
+              {filteredHistory.map((rec) => (
               <div
                 key={rec.id}
                 className="publish-record"
@@ -457,7 +458,8 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                   })}
                 </div>
               </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}

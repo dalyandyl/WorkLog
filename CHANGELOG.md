@@ -8,6 +8,15 @@
 - 也可以不维护本文件，发布时用命令行参数手动指定备注：
   `npm run publish:gitee -- -Message "备注"`（GitHub 同理）
 
+## [1.4.3] - 2026-09-07
+### Added
+- 新增「会议纪要」功能：新建 / 编辑 / 删除会议纪要，支持富文本编辑、标签、图片与文件附件、单篇导出 Markdown
+- 附件支持直接删除（删除附件文件入口）
+### Changed
+- 修复 electron-vite dev 模式下 protocol 与命令行开关初始化时机问题（开关移入 app.whenReady）
+- Electron 二进制下载镜像配置迁移（electron-builder.yml 的 electronDownload.mirror）
+- 部分 UI 细节调整
+
 ## [1.4.2] - 2026-09-04
 ### Added
 - 设置页新增「更新镜像源」选择（自动 / Gitee / GitHub），支持从 GitHub Releases 下载安装包

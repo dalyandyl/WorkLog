@@ -161,3 +161,25 @@ export type ExportOptions =
   | { mode: 'day'; date: string }
   | { mode: 'week'; weekKey: string }
   | { mode: 'range'; start: string; end: string }
+
+// ==================== 会议纪要功能类型定义 ====================
+
+/** 附件元数据（图片或文件） */
+export interface AttachmentMeta {
+  id: string          // UUID
+  name: string        // 文件名
+  url: string         // wlattach:// 协议路径或本地相对路径
+  type: 'image' | 'file'
+}
+
+/** 会议纪要 */
+export interface Meeting {
+  id: string              // UUID
+  title: string           // 会议标题
+  date: string            // YYYY-MM-DD（会议日期）
+  tags: string[]          // 标签 id 列表，复用现有 Tag 库
+  body: string            // Markdown + HTML 混合内容（富文本存储为带标签的 HTML）
+  attachments: AttachmentMeta[]
+  createdAt: string       // 创建时间 ISO
+  updatedAt: string       // 最后修改时间 ISO
+}

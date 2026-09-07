@@ -44,23 +44,27 @@ import { migrateLegacyData, resetMigration } from './migrate'
 import { createTray, startReminder } from './tray'
 import {
   attachmentUrlToPath,
+  deleteAttachmentFile,
   importAttachmentFile,
   saveAttachmentBuffer
 } from './attachments'
+import type { Meeting } from '../shared/types'
+import { listMeetings, saveMeeting, deleteMeeting } from './meetings'
+import { meetingToMarkdown, meetingExportFileName } from './meetingExport'
 
-// 关闭 Chromium 光标所在行的高亮（编辑器中出现黄框高亮一行的问题）
-app.commandLine.appendSwitch('disable-features', 'CaretLineHighlight')
-// 禁用 GPU 着色器磁盘缓存与 HTTP 磁盘缓存：避免缓存目录无法移动/创建时报错（0x5 拒绝访问）
-app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
-app.commandLine.appendSwitch('disk-cache-size', '0')
+// 注：commandLine.appendSwitch 已移至 app.whenReady() 内部执行，
+// 因为在 electron-vite dev 模式下模块顶层的 app/protocol 对象尚未初始化。
 
 // 自定义协议：用于在界面中显示/打开本地附件，须在 app ready 前注册
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'wlattach',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
-  }
-])
+// （在 electron-vite dev 模式下 protocol 可能为 undefined，需要条件调用）
+if (typeof protocol !== 'undefined') {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'wlattach',
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+    }
+  ])
+}
 
 let isQuitting = false
 
@@ -153,6 +157,12 @@ app.whenReady().then(async () => {
   if (!gotTheLock) return // 第二个实例：已在上面请求退出，不再初始化任何东西
 
   app.setAppUserModelId('com.worklog.app')
+
+  // 关闭 Chromium 光标所在行的高亮（编辑器中出现黄框高亮一行的问题）
+  // 禁用 GPU 着色器磁盘缓存与 HTTP 磁盘缓存：避免缓存目录无法移动/创建时报错
+  app.commandLine.appendSwitch('disable-features', 'CaretLineHighlight')
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+  app.commandLine.appendSwitch('disk-cache-size', '0')
 
   // 日志存储根目录：打包后 = %APPDATA%/WorkLog/logs（持久目录）；开发中 = 项目目录/logs
   const storageRoot = getStorageRoot()
@@ -387,6 +397,45 @@ app.whenReady().then(async () => {
     if (!filePath) return { ok: false, error: '附件路径无效' }
     const err = await shell.openPath(filePath)
     return err ? { ok: false, error: err } : { ok: true }
+  })
+  ipcMain.handle('attach:delete', async (_event, url: string) => {
+    const ok = await deleteAttachmentFile(storageRoot, url)
+    return ok ? { ok: true } : { ok: false, error: '附件路径无效或删除失败' }
+  })
+
+  // ---- 会议纪要 ----
+  ipcMain.handle('meetings:list', () => listMeetings(storageRoot))
+  ipcMain.handle(
+    'meetings:save',
+    async (_event, meeting: Meeting) => {
+      await saveMeeting(storageRoot, meeting)
+      return { ok: true }
+    }
+  )
+  ipcMain.handle('meetings:delete', (_event, id: string) => deleteMeeting(storageRoot, id))
+
+  // 单篇导出 Markdown（元信息头 + 正文转换 + 附件清单）
+  ipcMain.handle('meetings:export', async (_event, meeting: Meeting) => {
+    try {
+      const tags = await listTags(storageRoot)
+      const tagNames = (meeting.tags ?? [])
+        .map((id) => tags.find((t) => t.id === id)?.name)
+        .filter((n): n is string => Boolean(n))
+      const md = meetingToMarkdown(meeting, tagNames)
+      const options: Electron.SaveDialogOptions = {
+        title: '导出会议纪要',
+        defaultPath: meetingExportFileName(meeting),
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+      await fs.writeFile(res.filePath, md, 'utf-8')
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      console.error('meetings:export failed:', err)
+      return { ok: false, error: String(err) }
+    }
   })
 
   // ---- 导出 Markdown ----

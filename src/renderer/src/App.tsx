@@ -9,10 +9,11 @@ import ReportView from './components/ReportView'
 import DayView from './components/DayView'
 import WeeklyView from './components/WeeklyView'
 import SettingsModal from './components/SettingsModal'
+import MeetingList from './components/MeetingList'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash'
+type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting'
 
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
@@ -103,15 +104,17 @@ export default function App() {
             报表
           </button>
           <button className={mode === 'tags' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('tags')}>
-            🏷 标签
+            标签
+          </button>
+          <button className={mode === 'meeting' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('meeting')}>
+            会议
           </button>
           <button className={mode === 'trash' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('trash')}>
-            🗑 回收站
+            回收站
           </button>
         </div>
         <div className="topbar-right">
           <SearchBox onPick={(d, taskId) => { setMode('day'); setDate(d); setDaySel({ date: d, taskId }) }} />
-          <span className="status" title={storageRoot}>{status}</span>
         </div>
       </header>
 
@@ -172,6 +175,15 @@ export default function App() {
           {mode === 'trash' && (
             <TrashView onStatus={setStatus} onRestored={refreshTaskDates} />
           )}
+
+          {mode === 'meeting' && (
+            <MeetingList tags={tags} onStatus={setStatus} />
+          )}
+
+          {/* 底部状态栏 */}
+          <div className="main-footer">
+            <span className="status" title={storageRoot}>{status}</span>
+          </div>
         </main>
       </div>
 
