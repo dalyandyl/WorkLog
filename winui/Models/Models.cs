@@ -57,3 +57,23 @@ public class AppSettingsMirror
     [JsonPropertyName("theme")] public string Theme { get; set; } = "system";
     [JsonPropertyName("accent")] public string Accent { get; set; } = "blue";
 }
+
+/// <summary>回收站条目（trash.json 的 items[]，对齐 shared/types.ts）</summary>
+public class TrashedTask
+{
+    [JsonPropertyName("date")] public string Date { get; set; } = "";
+    [JsonPropertyName("task")] public TaskItem Task { get; set; } = new();
+}
+
+public class TrashItem
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("title")] public string Title { get; set; } = "";
+    [JsonPropertyName("deletedAt")] public string DeletedAt { get; set; } = "";
+    [JsonPropertyName("tasks")] public List<TrashedTask> Tasks { get; set; } = new();
+}
+
+public class TrashFile
+{
+    [JsonPropertyName("items")] public List<TrashItem> Items { get; set; } = new();
+}

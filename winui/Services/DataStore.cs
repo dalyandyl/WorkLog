@@ -175,47 +175,180 @@ public class DataStore
         }
     }
 
-    /// <summary>新建任务（当天）</summary>
-    public TaskItem CreateTask(string date, string title)
+    /// <summary>新建任务（当天，完整字段）</summary>
+    public TaskItem CreateTaskFull(string date, string title, string body, string note, List<Subtask> subtasks)
     {
         var tasks = ReadTasks(date);
+        var task = MakeTask(title, tasks);
+        task.Body = body;
+        task.Note = note;
+        task.Subtasks = subtasks;
+        tasks.Add(task);
+        WriteTasks(Root, date, tasks);
+        return task;
+    }
+
+    /// <summary>新建任务（仅标题）</summary>
+    public TaskItem CreateTask(string date, string title) => CreateTaskFull(date, title, "", "", new());
+
+    /// <summary>编辑任务：多天同步（对齐 updateTask：共享 id 的所有日期更新，保留各天 order）</summary>
+    public bool UpdateTask(string date, string taskId, Action<TaskItem> patch)
+    {
+        var tasks = ReadTasks(date);
+        var task = tasks.FirstOrDefault(t => t.Id == taskId);
+        if (task is null) return false;
+
+        patch(task);
+        task.UpdatedAt = IsoNow();
+
+        foreach (var d in DatesOfTask(taskId))
+        {
+            var dayTasks = ReadTasks(d);
+            var idx = dayTasks.FindIndex(t => t.Id == taskId);
+            if (idx != -1)
+            {
+                var localOrder = dayTasks[idx].Order;
+                dayTasks[idx] = task;
+                dayTasks[idx].Order = localOrder;
+                WriteTasks(Root, d, dayTasks);
+            }
+        }
+        return true;
+    }
+
+    /// <summary>任务发布：区间派发，同一任务 id 写入所选每个日期（对齐 publishTasks）</summary>
+    public int PublishTasks(List<string> dates, string title, string body, List<Subtask> subtasks)
+    {
         var now = IsoNow();
         var task = new TaskItem
         {
             Id = Guid.NewGuid().ToString(),
             Title = title.Trim(),
             Done = false,
+            Body = body,
+            Subtasks = subtasks,
             PublishedAt = now,
-            CompletedAt = null,
-            Order = tasks.Select(t => t.Order).DefaultIfEmpty(-1).Max() + 1,
+            Order = 0,
             CreatedAt = now,
             UpdatedAt = now
         };
-        tasks.Add(task);
-        WriteTasks(Root, date, tasks);
-        return task;
+
+        foreach (var d in dates)
+        {
+            var tasks = ReadTasks(d);
+            task.Order = tasks.Select(t => t.Order).DefaultIfEmpty(-1).Max() + 1;
+            tasks.Add(task);
+            WriteTasks(Root, d, tasks);
+        }
+        return dates.Count;
+    }
+
+    private static TaskItem MakeTask(string title, List<TaskItem> existing)
+    {
+        var now = IsoNow();
+        return new TaskItem
+        {
+            Id = Guid.NewGuid().ToString(),
+            Title = title.Trim(),
+            Done = false,
+            PublishedAt = now,
+            CompletedAt = null,
+            Order = existing.Select(t => t.Order).DefaultIfEmpty(-1).Max() + 1,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
     }
 
     /// <summary>JS toISOString 等价格式（UTC）</summary>
     private static string IsoNow() =>
         DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fff") + "Z";
 
-    /// <summary>删除任务（从所有包含该 id 的日期移除，对齐 deleteTask）</summary>
-    public bool DeleteTask(string date, string taskId)
+    /// <summary>删除任务：从所有天移除并写入回收站（对齐 index.ts tasks:trash）</summary>
+    public bool TrashTask(string date, string taskId)
     {
-        var found = false;
+        var trashed = new List<TrashedTask>();
         foreach (var d in DatesOfTask(taskId))
         {
             var tasks = ReadTasks(d);
-            var next = tasks.Where(t => t.Id != taskId).ToList();
-            if (next.Count != tasks.Count)
-            {
-                found = true;
-                WriteTasks(Root, d, next);
-            }
+            var task = tasks.FirstOrDefault(t => t.Id == taskId);
+            if (task is null) continue;
+            trashed.Add(new TrashedTask { Date = d, Task = task });
+            WriteTasks(Root, d, tasks.Where(t => t.Id != taskId).ToList());
         }
-        return found;
+        if (trashed.Count == 0) return false;
+
+        var items = ReadTrashRaw();
+        items.Insert(0, new TrashItem
+        {
+            Id = Guid.NewGuid().ToString(),
+            Title = trashed[0].Task.Title.Length > 0 ? trashed[0].Task.Title : "未命名任务",
+            DeletedAt = IsoNow(),
+            Tasks = trashed
+        });
+        WriteTrash(items);
+        return true;
     }
+
+    // ---------------- 回收站（trash.json） ----------------
+
+    private string TrashPath => Path.Combine(Root, "trash.json");
+
+    private List<TrashItem> ReadTrashRaw()
+    {
+        try
+        {
+            if (!File.Exists(TrashPath)) return new();
+            var f = JsonSerializer.Deserialize<TrashFile>(File.ReadAllText(TrashPath), JsonOpts);
+            return f?.Items ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private void WriteTrash(List<TrashItem> items)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(TrashPath)!);
+        File.WriteAllText(TrashPath, JsonSerializer.Serialize(new TrashFile { Items = items }, JsonOpts));
+    }
+
+    /// <summary>回收站列表（删除时间倒序，对齐 listTrash）</summary>
+    public List<TrashItem> ListTrash() =>
+        ReadTrashRaw().OrderByDescending(i => i.DeletedAt).ToList();
+
+    /// <summary>恢复条目：任务实例写回各自日期（对齐 restoreTasksToDays）</summary>
+    public bool RestoreTrashItem(string id)
+    {
+        var items = ReadTrashRaw();
+        var item = items.FirstOrDefault(i => i.Id == id);
+        if (item is null) return false;
+
+        foreach (var entry in item.Tasks)
+        {
+            var tasks = ReadTasks(entry.Date);
+            // 若同 id 已存在（重复恢复/重派发）则跳过
+            if (tasks.Any(t => t.Id == entry.Task.Id)) continue;
+            entry.Task.Order = tasks.Select(t => t.Order).DefaultIfEmpty(-1).Max() + 1;
+            tasks.Add(entry.Task);
+            WriteTasks(Root, entry.Date, tasks);
+        }
+        WriteTrash(items.Where(i => i.Id != id).ToList());
+        return true;
+    }
+
+    /// <summary>永久删除单条</summary>
+    public bool RemoveTrashItem(string id)
+    {
+        var items = ReadTrashRaw();
+        var next = items.Where(i => i.Id != id).ToList();
+        if (next.Count == items.Count) return false;
+        WriteTrash(next);
+        return true;
+    }
+
+    /// <summary>清空回收站</summary>
+    public void ClearTrash() => WriteTrash(new());
 }
 
 /// <summary>WinUI 版独立设置（winui-settings.json，不写 Electron 版设置）</summary>

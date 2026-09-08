@@ -2,7 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Windows.UI;
+using WorkLog_WinUI.Dialogs;
 
 namespace WorkLog_WinUI.Pages;
 
@@ -88,40 +90,33 @@ public sealed partial class DayPage : Page
         }
     }
 
-    /// <summary>新建任务</summary>
+    /// <summary>新建任务（完整对话框）</summary>
     private async void AddBtn_Click(object sender, RoutedEventArgs e)
     {
-        var input = new TextBox { PlaceholderText = "任务标题" };
-        var dialog = new ContentDialog
-        {
-            Title = $"新建任务 · {_currentDate}",
-            Content = input,
-            PrimaryButtonText = "创建",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot
-        };
-
+        var dialog = TaskEditDialog.Create(_currentDate);
+        dialog.XamlRoot = XamlRoot;
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-        {
-            var title = input.Text.Trim();
-            if (title.Length > 0)
-            {
-                App.Data.CreateTask(_currentDate, title);
-                LoadDay();
-            }
-        }
+            LoadDay();
     }
 
+    /// <summary>编辑任务（行菜单，id 绑在 MenuFlyoutItem.Tag 上）</summary>
+    private async void EditItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem item || item.Tag is not string id) return;
+        var task = App.Data.ReadTasks(_currentDate).FirstOrDefault(t => t.Id == id);
+        if (task is null) return;
+        var dialog = TaskEditDialog.Edit(_currentDate, task);
+        dialog.XamlRoot = XamlRoot;
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            LoadDay();
+    }
+
+    /// <summary>删除任务：进回收站（行菜单，对齐 Electron tasks:trash）</summary>
     private void DeleteItem_Click(object sender, RoutedEventArgs e)
     {
-        // MenuFlyoutItem 在 Flyout 内，取父级 Button 的 Tag（任务 id）
-        if (sender is MenuFlyoutItem item &&
-            item.Parent is MenuFlyout flyout &&
-            flyout.Target is Button btn &&
-            btn.Tag is string id)
+        if (sender is MenuFlyoutItem item && item.Tag is string id)
         {
-            App.Data.DeleteTask(_currentDate, id);
+            App.Data.TrashTask(_currentDate, id);
             LoadDay();
         }
     }

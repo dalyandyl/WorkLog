@@ -117,7 +117,13 @@
                             <FontIcon Glyph="&#xE712;" FontSize="14" />
                             <Button.Flyout>
                                 <MenuFlyout>
-                                    <MenuFlyoutItem Text="删除任务" Click="DeleteItem_Click">
+                                    <MenuFlyoutItem Text="编辑任务（所有天同步）" Click="EditItem_Click" Tag="{x:Bind Id}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE70F;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Text="删除（进回收站）" Click="DeleteItem_Click" Tag="{x:Bind Id}">
                                         <MenuFlyoutItem.Icon>
                                             <FontIcon Glyph="&#xE74D;" />
                                         </MenuFlyoutItem.Icon>
