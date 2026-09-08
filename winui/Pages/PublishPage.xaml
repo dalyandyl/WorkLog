@@ -9,30 +9,105 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer>
-        <StackPanel Padding="36,24" Spacing="16" MaxWidth="640" VerticalAlignment="Top">
+    <Grid Padding="36,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource PageTitle}" Text="任务发布" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Content="新建待发布" Click="NewPendingBtn_Click" />
+        <!-- 标题 + 发布任务 -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource PageTitle}" Text="任务发布" />
+            <Button x:Name="NewPendingBtn" Grid.Column="1" Click="NewPendingBtn_Click">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                    <TextBlock Text="发布任务" />
+                </StackPanel>
+            </Button>
+        </Grid>
+        <TextBlock Grid.Row="1" Style="{StaticResource PageSubtitle}" Margin="0,0,0,12"
+                   Text="支持批量多任务派发；发布后自动同步到所选日期的日报中" />
+
+        <!-- Tab：已发布任务 / 发布历史 -->
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="TabPublished" Click="TabPublished_Click" CornerRadius="6,0,0,6" MinWidth="110" />
+            <Button x:Name="TabHistory" Grid.Column="1" Click="TabHistory_Click" CornerRadius="0,6,6,0" MinWidth="110" />
+        </Grid>
+
+        <!-- 已发布任务列表 -->
+        <ListView x:Name="PublishedList" Grid.Row="3" SelectionMode="None" Visibility="Collapsed">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:PublishedRow">
+                    <Grid Padding="12,10" ColumnSpacing="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6"
+                          Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Vertical" Spacing="2">
+                            <TextBlock FontWeight="SemiBold" Text="{x:Bind Title}" />
+                            <TextBlock FontSize="11" Style="{StaticResource PageSubtitle}" Text="{x:Bind Detail}" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" MinWidth="0" VerticalAlignment="Center"
+                                  IsChecked="{x:Bind Done, Mode=OneWay}" Tag="{x:Bind Key}" Click="PublishedCheck_Click" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- 发布历史列表 -->
+        <ListView x:Name="HistoryList" Grid.Row="3" SelectionMode="None">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:HistoryRow">
+                    <Grid Padding="12,10" ColumnSpacing="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6"
+                          Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Vertical" Spacing="2">
+                            <TextBlock FontWeight="SemiBold" Text="{x:Bind Title}" />
+                            <TextBlock FontSize="11" Style="{StaticResource PageSubtitle}" Text="{x:Bind Detail}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Padding="6,3" Background="Transparent" BorderThickness="0"
+                                Tag="{x:Bind Id}" Click="RemoveRecord_Click" ToolTipService.ToolTip="删除该条发布记录">
+                            <FontIcon Glyph="&#xE74D;" FontSize="13" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- 待发布表单 -->
+        <ScrollViewer Grid.Row="3" x:Name="PendingArea" Visibility="Collapsed">
+            <StackPanel Spacing="12" Padding="0,4,12,24" MaxWidth="640" HorizontalAlignment="Left">
+                <TextBlock FontSize="16" FontWeight="SemiBold" Text="待发布任务" />
+                <StackPanel x:Name="PendingList" Spacing="12" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Content="添加一个任务" Click="NewPendingBtn_Click" />
                     <Button x:Name="PublishAllBtn" Style="{StaticResource AccentButtonStyle}" Click="PublishAllBtn_Click">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE724;" FontSize="14" />
                             <TextBlock Text="发布全部" />
                         </StackPanel>
                     </Button>
+                    <Button Content="取消" Click="CancelPending_Click" />
                 </StackPanel>
-            </Grid>
-            <TextBlock Style="{StaticResource PageSubtitle}" Text="区间派发：同一任务写入所选每个日期，任一天的勾选/编辑都会同步到所有天" />
+            </StackPanel>
+        </ScrollViewer>
 
-            <!-- 待发布卡片列表 -->
-            <StackPanel x:Name="PendingList" Spacing="12" />
-            <InfoBar x:Name="ResultBar" IsOpen="False" />
-        </StackPanel>
-    </ScrollViewer>
+        <InfoBar x:Name="ResultBar" Grid.Row="3" IsOpen="False" VerticalAlignment="Bottom" />
+    </Grid>
 </Page>

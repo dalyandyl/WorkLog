@@ -25,9 +25,26 @@ public sealed partial class WlDatePicker : UserControl
         set => SetValue(SelectedDateProperty, value);
     }
 
-    private static void OnSelectedDateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    /// <summary>自定义按钮文字（如侧栏日历标题"2026 年 9 月"）；不设则显示完整日期</summary>
+    public static readonly DependencyProperty CustomLabelProperty =
+        DependencyProperty.Register(nameof(CustomLabel), typeof(string), typeof(WlDatePicker),
+            new PropertyMetadata(null, OnCustomLabelChanged));
+
+    public string? CustomLabel
+    {
+        get => (string?)GetValue(CustomLabelProperty);
+        set => SetValue(CustomLabelProperty, value);
+    }
+
+    private static void OnCustomLabelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is WlDatePicker p)
+            p.Label.Text = e.NewValue as string ?? FormatDate(p.SelectedDate);
+    }
+
+    private static void OnSelectedDateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is WlDatePicker p && p.CustomLabel is null)
             p.Label.Text = FormatDate(e.NewValue as string ?? "");
     }
 
@@ -206,7 +223,8 @@ public sealed partial class WlDatePicker : UserControl
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Background = null,
                 BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(15)
+                CornerRadius = new CornerRadius(15),
+                UseSystemFocusVisuals = false
             };
             if (isSel)
             {

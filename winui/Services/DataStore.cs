@@ -216,7 +216,7 @@ public class DataStore
         return true;
     }
 
-    /// <summary>任务发布：区间派发，同一任务 id 写入所选每个日期（对齐 publishTasks）</summary>
+    /// <summary>任务发布：区间派发，同一任务 id 写入所选每个日期（对齐 publishTasks），并写发布历史</summary>
     public int PublishTasks(List<string> dates, string title, string body, List<Subtask> subtasks)
     {
         var now = IsoNow();
@@ -233,14 +233,102 @@ public class DataStore
             UpdatedAt = now
         };
 
+        var instances = new List<PublishInstance>();
         foreach (var d in dates)
         {
             var tasks = ReadTasks(d);
             task.Order = tasks.Select(t => t.Order).DefaultIfEmpty(-1).Max() + 1;
             tasks.Add(task);
             WriteTasks(Root, d, tasks);
+            instances.Add(new PublishInstance { Date = d, TaskId = task.Id });
         }
+
+        // 发布历史（对齐主进程 publish 处理器：publishTasks + addPublishRecord）
+        AddPublishRecord(new PublishRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            Title = task.Title,
+            Dates = dates,
+            Body = body,
+            Subtasks = subtasks,
+            PublishedAt = now,
+            Instances = instances
+        });
         return dates.Count;
+    }
+
+    // ---------------- 休息日标记（rest.json，对齐 meta.ts） ----------------
+
+    private string RestPath => Path.Combine(Root, "rest.json");
+
+    private HashSet<string> ReadRestSet()
+    {
+        try
+        {
+            if (!File.Exists(RestPath)) return new();
+            var doc = JsonNode.Parse(File.ReadAllText(RestPath));
+            var set = new HashSet<string>();
+            if (doc?["dates"] is JsonNode dates)
+                foreach (var prop in dates.AsObject())
+                    if (prop.Value?["rest"]?.GetValue<bool>() == true)
+                        set.Add(prop.Key);
+            return set;
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    public bool IsRest(string date) => ReadRestSet().Contains(date);
+
+    public void SetRest(string date, bool rest)
+    {
+        var set = ReadRestSet();
+        if (rest) set.Add(date); else set.Remove(date);
+        var dates = new JsonObject();
+        foreach (var d in set) dates[d] = new JsonObject { ["rest"] = true };
+        Directory.CreateDirectory(Path.GetDirectoryName(RestPath)!);
+        File.WriteAllText(RestPath, JsonSerializer.Serialize(new JsonObject { ["dates"] = dates }, JsonOpts));
+    }
+
+    // ---------------- 发布历史（publish-history.json） ----------------
+
+    private string HistoryPath => Path.Combine(Root, "publish-history.json");
+
+    /// <summary>发布记录列表（新记录在前，对齐 readPublishRecords + unshift 语义）</summary>
+    public List<PublishRecord> ReadPublishRecords()
+    {
+        try
+        {
+            if (!File.Exists(HistoryPath)) return new();
+            var f = JsonSerializer.Deserialize<PublishHistoryFile>(File.ReadAllText(HistoryPath), JsonOpts);
+            return f?.Records ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private void AddPublishRecord(PublishRecord record)
+    {
+        var records = ReadPublishRecords();
+        records.Insert(0, record);
+        Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+        File.WriteAllText(HistoryPath,
+            JsonSerializer.Serialize(new PublishHistoryFile { Records = records }, JsonOpts));
+    }
+
+    /// <summary>删除发布记录（不影响已发布到各天的任务，对齐 deletePublishRecord）</summary>
+    public bool RemovePublishRecord(string id)
+    {
+        var records = ReadPublishRecords();
+        var next = records.Where(r => r.Id != id).ToList();
+        if (next.Count == records.Count) return false;
+        File.WriteAllText(HistoryPath,
+            JsonSerializer.Serialize(new PublishHistoryFile { Records = next }, JsonOpts));
+        return true;
     }
 
     private static TaskItem MakeTask(string title, List<TaskItem> existing)

@@ -25,6 +25,9 @@ public sealed partial class MainWindow : Window
 
     public Frame Frame => RootFrame;
 
+    /// <summary>侧栏常驻日历（供页面同步选中态）</summary>
+    public Controls.SidebarCalendar SidebarCalendar => SidebarCal;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -33,8 +36,26 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
+        // 侧栏日历：初始选中今天，点日期跳日报页（已在日报页时直接切换日期）
+        SidebarCal.SelectedDate = DateTime.Today.ToString("yyyy-MM-dd");
+        SidebarCal.DateSelected += (_, date) =>
+        {
+            if (RootFrame.Content is DayPage day)
+                day.NavigateToDate(date);
+            else
+            {
+                DayPage.PendingNavigateDate = date;
+                RootFrame.Navigate(typeof(DayPage));
+            }
+        };
+
         RootFrame.Navigate(typeof(DayPage));
+        RefreshCalendarMarkers();
     }
+
+    /// <summary>刷新侧栏日历的任务标记（有任务的日期）</summary>
+    public void RefreshCalendarMarkers() =>
+        SidebarCal.SetMarkers(new HashSet<string>(App.Data.ListDatesWithTasks()));
 
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {

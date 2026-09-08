@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ctl="using:WorkLog_WinUI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="WorkLog"
     mc:Ignorable="d">
@@ -32,6 +33,10 @@
             OpenPaneLength="200"
             PaneDisplayMode="Left"
             SelectionChanged="Nav_SelectionChanged">
+            <NavigationView.PaneCustomContent>
+                <!-- 常驻日历：节假日标红/调休班徽/任务标记（对齐原版侧栏） -->
+                <ctl:SidebarCalendar x:Name="SidebarCal" />
+            </NavigationView.PaneCustomContent>
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="日志" SelectsOnInvoked="False">
                     <NavigationViewItem.Icon>

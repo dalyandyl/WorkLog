@@ -1,7 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using WorkLog_WinUI.Controls;
 using WorkLog_WinUI.Models;
@@ -20,33 +22,155 @@ public class PendingTask
     public string End { get; set; } = DateTime.Today.ToString("yyyy-MM-dd");
 }
 
+/// <summary>已发布任务行（date|taskId 作为键）</summary>
+public record PublishedRow(string Key, string Title, string Detail, bool Done);
+
+/// <summary>发布历史行</summary>
+public record HistoryRow(string Id, string Title, string Detail);
+
 public sealed partial class PublishPage : Page
 {
+    private readonly ObservableCollection<PublishedRow> _published = new();
+    private readonly ObservableCollection<HistoryRow> _history = new();
     private readonly List<PendingTask> _pending = new();
+    private bool _showHistory; // false = 已发布任务 Tab
 
     public PublishPage()
     {
         InitializeComponent();
+        PublishedList.ItemsSource = _published;
+        HistoryList.ItemsSource = _history;
+        // 初始化 Tab 样式与列表可见性（此前需手动点一次 Tab 才有内容）
+        Loaded += (_, _) => SwitchTab(false);
+    }
+
+    // ---------------- Tab 切换 ----------------
+
+    private void TabPublished_Click(object sender, RoutedEventArgs e) => SwitchTab(false);
+    private void TabHistory_Click(object sender, RoutedEventArgs e) => SwitchTab(true);
+
+    private void SwitchTab(bool history)
+    {
+        _showHistory = history;
+        PendingArea.Visibility = Visibility.Collapsed;
+        StyleTab(TabPublished, !history, "已发布任务");
+        StyleTab(TabHistory, history, "发布历史");
+
+        PublishedList.Visibility = !history ? Visibility.Visible : Visibility.Collapsed;
+        HistoryList.Visibility = history ? Visibility.Visible : Visibility.Collapsed;
+        LoadCurrentTab();
+    }
+
+    private void StyleTab(Button tab, bool active, string text)
+    {
+        tab.Content = text;
+        if (active)
+        {
+            tab.Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+            tab.Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"];
+        }
+        else
+        {
+            tab.Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"];
+            tab.Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
+        }
+    }
+
+    private void LoadCurrentTab()
+    {
+        if (_showHistory) LoadHistory(); else LoadPublished();
+    }
+
+    // ---------------- 已发布任务 ----------------
+
+    private void LoadPublished()
+    {
+        _published.Clear();
+        foreach (var d in App.Data.ListDatesWithTasks().AsEnumerable().Reverse())
+        {
+            foreach (var t in App.Data.ReadTasks(d))
+            {
+                var detail = $"{d} · 派发 {FormatIso(t.PublishedAt)}";
+                if (t.CompletedAt is string c && c.Length > 0)
+                    detail += $" · 完成于 {FormatIso(c)}";
+                _published.Add(new PublishedRow($"{d}|{t.Id}", t.Title, detail, t.Done));
+            }
+        }
+        if (_published.Count == 0)
+            ShowResult(InfoBarSeverity.Informational, "暂无已发布任务，点击右上角「发布任务」开始");
+    }
+
+    private void PublishedCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox cb && cb.Tag is string key)
+        {
+            var i = key.IndexOf('|');
+            var date = key[..i];
+            var id = key[(i + 1)..];
+            if (cb.IsChecked is bool done)
+            {
+                App.Data.SetTaskDone(date, id, done);
+                LoadPublished();
+            }
+        }
+    }
+
+    // ---------------- 发布历史 ----------------
+
+    private void LoadHistory()
+    {
+        _history.Clear();
+        foreach (var r in App.Data.ReadPublishRecords())
+        {
+            var range = r.Dates.Count == 1
+                ? r.Dates[0]
+                : $"{r.Dates.Count} 天（{r.Dates.Min()} ~ {r.Dates.Max()}）";
+            _history.Add(new HistoryRow(r.Id, r.Title, $"发布于 {FormatIso(r.PublishedAt)} · {range}"));
+        }
+        if (_history.Count == 0)
+            ShowResult(InfoBarSeverity.Informational, "暂无发布历史");
+    }
+
+    private void RemoveRecord_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.Tag is string id)
+        {
+            App.Data.RemovePublishRecord(id);
+            LoadHistory();
+        }
+    }
+
+    // ---------------- 待发布表单 ----------------
+
+    private void NewPendingBtn_Click(object sender, RoutedEventArgs e)
+    {
         if (_pending.Count == 0) _pending.Add(new PendingTask());
+        _showHistory = false;
+        StyleTab(TabPublished, true, "已发布任务");
+        StyleTab(TabHistory, false, "发布历史");
+        PublishedList.Visibility = Visibility.Collapsed;
+        HistoryList.Visibility = Visibility.Collapsed;
+        ResultBar.IsOpen = false;
+        PendingArea.Visibility = Visibility.Visible;
         RebuildList();
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _pending.Clear(); // 离开页面丢弃未发布草稿
+    }
+
+    private void CancelPending_Click(object sender, RoutedEventArgs e)
+    {
+        _pending.Clear();
+        PendingArea.Visibility = Visibility.Collapsed;
+        SwitchTab(false);
     }
 
     private void RebuildList()
     {
         PendingList.Children.Clear();
-
-        if (_pending.Count == 0)
-        {
-            var hint = new TextBlock
-            {
-                Text = "点击右上角「新建待发布」添加任务",
-                Style = (Style)Application.Current.Resources["PageSubtitle"],
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 24, 0, 24)
-            };
-            PendingList.Children.Add(hint);
-        }
-
         foreach (var p in _pending)
             PendingList.Children.Add(BuildCard(p));
     }
@@ -58,6 +182,8 @@ public sealed partial class PublishPage : Page
         {
             Padding = new Thickness(16),
             CornerRadius = new CornerRadius(8),
+            MaxWidth = 560,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             Style = (Style)Application.Current.Resources["CardStyle"]
         };
         var panel = new StackPanel { Spacing = 12 };
@@ -68,13 +194,8 @@ public sealed partial class PublishPage : Page
         head.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Auto) });
 
-        var titleBox = new TextBox
-        {
-            PlaceholderText = "任务标题",
-            Header = p == _pending[0] ? "标题" : null,
-            Text = p.Title
-        };
-        titleBox.TextChanged += (_, e) => p.Title = titleBox.Text;
+        var titleBox = new TextBox { PlaceholderText = "任务标题", Text = p.Title };
+        titleBox.TextChanged += (_, _) => p.Title = titleBox.Text;
         var removeBtn = new Button
         {
             Content = new FontIcon { Glyph = "\uE711", FontSize = 13 },
@@ -82,7 +203,7 @@ public sealed partial class PublishPage : Page
             Background = null,
             BorderThickness = new Thickness(0)
         };
-        removeBtn.Click += (_, _) => { _pending.Remove(p); RebuildList(); };
+        removeBtn.Click += (_, _) => { _pending.Remove(p); if (_pending.Count == 0) _pending.Add(new PendingTask()); RebuildList(); };
 
         Grid.SetColumn(titleBox, 0);
         Grid.SetColumn(removeBtn, 1);
@@ -102,19 +223,15 @@ public sealed partial class PublishPage : Page
 
         // ---- 日期选择（按模式） ----
         var datePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-
         if (!p.RangeMode)
         {
-            var single = MakePicker(p.SingleDate, v => p.SingleDate = v, "发布日期");
-            datePanel.Children.Add(single);
+            datePanel.Children.Add(MakePicker(p.SingleDate, v => p.SingleDate = v));
         }
         else
         {
-            var start = MakePicker(p.Start, v => p.Start = v, "起始");
-            datePanel.Children.Add(start);
+            datePanel.Children.Add(MakePicker(p.Start, v => p.Start = v));
             datePanel.Children.Add(new TextBlock { Text = "至", VerticalAlignment = VerticalAlignment.Center });
-            var end = MakePicker(p.End, v => p.End = v, "结束");
-            datePanel.Children.Add(end);
+            datePanel.Children.Add(MakePicker(p.End, v => p.End = v));
         }
         panel.Children.Add(datePanel);
 
@@ -133,31 +250,17 @@ public sealed partial class PublishPage : Page
         return card;
     }
 
-    private StackPanel MakePicker(string value, Action<string> set, string header)
+    private StackPanel MakePicker(string value, Action<string> set)
     {
         var host = new StackPanel { Spacing = 4 };
-        if (header.Length > 0)
-            host.Children.Add(new TextBlock
-            {
-                Text = header,
-                FontSize = 12,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-            });
-
         var picker = new WlDatePicker { SelectedDate = value };
         picker.DatePicked += (_, v) => set(v);
         host.Children.Add(picker);
         return host;
     }
 
-    private void NewPendingBtn_Click(object sender, RoutedEventArgs e)
-    {
-        _pending.Add(new PendingTask());
-        RebuildList();
-    }
-
-    /// <summary>发布全部待发布任务（对齐原版 openForm/submit 流程的批量派发）</summary>
-    private async void PublishAllBtn_Click(object sender, RoutedEventArgs e)
+    /// <summary>发布全部待发布任务</summary>
+    private void PublishAllBtn_Click(object sender, RoutedEventArgs e)
     {
         var valid = _pending.Where(p => p.Title.Trim().Length > 0).ToList();
         if (valid.Count == 0)
@@ -185,13 +288,13 @@ public sealed partial class PublishPage : Page
         }
 
         _pending.Clear();
-        _pending.Add(new PendingTask());
-        RebuildList();
-
-        var msg = bad.Count == 0
-            ? $"已发布 {valid.Count} 个任务，覆盖 {total} 天"
-            : $"已发布 {total} 天；{string.Join("；", bad)}";
-        ShowResult(InfoBarSeverity.Success, msg);
+        PendingArea.Visibility = Visibility.Collapsed;
+        SwitchTab(false);
+        ShowResult(InfoBarSeverity.Success,
+            bad.Count == 0
+                ? $"已发布 {valid.Count} 个任务，覆盖 {total} 天"
+                : $"已发布 {total} 天；{string.Join("；", bad)}");
+        App.MainWin?.RefreshCalendarMarkers();
     }
 
     private static List<string> EnumerateDates(string start, string end)
@@ -200,6 +303,13 @@ public sealed partial class PublishPage : Page
         for (var d = DateTime.Parse(start); d <= DateTime.Parse(end); d = d.AddDays(1))
             dates.Add(d.ToString("yyyy-MM-dd"));
         return dates;
+    }
+
+    private static string FormatIso(string iso)
+    {
+        if (DateTime.TryParse(iso, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d))
+            return d.ToLocalTime().ToString("yyyy/M/d HH:mm:ss");
+        return iso;
     }
 
     private void ShowResult(InfoBarSeverity severity, string message)

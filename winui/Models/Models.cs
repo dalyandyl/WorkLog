@@ -77,3 +77,27 @@ public class TrashFile
 {
     [JsonPropertyName("items")] public List<TrashItem> Items { get; set; } = new();
 }
+
+/// <summary>发布记录（publish-history.json 的 records[]，对齐 shared/types.ts）</summary>
+public class PublishInstance
+{
+    [JsonPropertyName("date")] public string Date { get; set; } = "";
+    [JsonPropertyName("taskId")] public string TaskId { get; set; } = "";
+}
+
+public class PublishRecord
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("title")] public string Title { get; set; } = "";
+    [JsonPropertyName("tags")] public List<string> Tags { get; set; } = new();
+    [JsonPropertyName("dates")] public List<string> Dates { get; set; } = new();
+    [JsonPropertyName("body")] public string Body { get; set; } = "";
+    [JsonPropertyName("subtasks")] public List<Subtask> Subtasks { get; set; } = new();
+    [JsonPropertyName("publishedAt")] public string PublishedAt { get; set; } = "";
+    [JsonPropertyName("instances")] public List<PublishInstance> Instances { get; set; } = new();
+}
+
+public class PublishHistoryFile
+{
+    [JsonPropertyName("records")] public List<PublishRecord> Records { get; set; } = new();
+}
