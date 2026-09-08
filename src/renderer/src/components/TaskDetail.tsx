@@ -1,3 +1,4 @@
+import { CalendarDays, CheckCircle2, CheckSquare, Pencil, Square, StickyNote, Trash2 } from 'lucide-react'
 import type { Tag, Task } from '../types'
 import RichView from './RichView'
 
@@ -19,7 +20,7 @@ export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskD
         </h3>
         {onEdit && (
           <button className="icon-btn" onClick={onEdit} title="编辑任务（所有天同步）">
-            ✏️
+            <Pencil size={15} />
           </button>
         )}
         {onDelete && (
@@ -28,7 +29,7 @@ export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskD
             onClick={onDelete}
             title="删除任务（进回收站，所有天同步）"
           >
-            🗑
+            <Trash2 size={15} />
           </button>
         )}
       </div>
@@ -46,9 +47,15 @@ export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskD
       </div>
 
       <div className="task-time-info">
-        <span>📅 派发：{new Date(task.publishedAt).toLocaleString()}</span>
+        <span>
+          <CalendarDays size={13} />
+          派发：{new Date(task.publishedAt).toLocaleString()}
+        </span>
         {task.completedAt && (
-          <span>✅ 完成：{new Date(task.completedAt).toLocaleString()}</span>
+          <span>
+            <CheckCircle2 size={13} />
+            完成：{new Date(task.completedAt).toLocaleString()}
+          </span>
         )}
       </div>
 
@@ -56,7 +63,9 @@ export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskD
         <div className="subtask-list read">
           {(task.subtasks ?? []).map((st) => (
             <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
-              <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+              <span className="subtask-check">
+                {st.done ? <CheckSquare size={13} /> : <Square size={13} />}
+              </span>
               <span className="subtask-title">{st.title}</span>
               <span className="subtask-tags">
                 {st.tags.map((id) => {
@@ -88,7 +97,10 @@ export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskD
 
       {task.note && task.note.trim() && (
         <div className="task-note">
-          <div className="task-note-label">📝 备注</div>
+          <div className="task-note-label">
+            <StickyNote size={13} />
+            备注
+          </div>
           <div className="task-note-view">{task.note}</div>
         </div>
       )}

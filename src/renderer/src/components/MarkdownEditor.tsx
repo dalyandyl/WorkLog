@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Image as ImageIcon, Paperclip } from 'lucide-react'
 
 interface MarkdownEditorProps {
   value: string
@@ -155,10 +156,12 @@ export default function MarkdownEditor({
     <div className="md-editor">
       <div className="md-editor-bar">
         <button className="md-mini-btn" onClick={() => imageInputRef.current?.click()} title="插入图片（支持多选/粘贴/拖拽）">
-          🖼 图片
+          <ImageIcon size={14} />
+          图片
         </button>
         <button className="md-mini-btn" onClick={() => void pickAttachments()} title="插入附件（支持多选）">
-          📎 附件
+          <Paperclip size={14} />
+          附件
         </button>
         <span className="md-editor-hint">支持 Markdown 语法：**加粗** ~~删除~~ # 标题 · 代码块 · 列表（右键可快速插入）</span>
       </div>

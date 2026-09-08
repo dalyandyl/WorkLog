@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import type { Tag } from '../types'
 import Modal from './Modal'
 
@@ -76,10 +77,10 @@ function TagRow({
           title="修改颜色"
         />
         <button className="icon-btn primary" onClick={save} title="保存">
-          💾
+          <Save size={15} />
         </button>
         <button className="icon-btn" onClick={cancel} title="取消">
-          ✕
+          <X size={15} />
         </button>
       </div>
     )
@@ -93,10 +94,10 @@ function TagRow({
         使用 {tag.useCount ?? 0} 次 · 创建于 {tag.createdAt.slice(0, 10)}
       </span>
       <button className="icon-btn" onClick={() => setEditing(true)} title="编辑">
-        ✏️
+        <Pencil size={15} />
       </button>
       <button className="icon-btn danger" onClick={() => onDelete(tag.id, tag.name)} title="删除标签">
-        🗑
+        <Trash2 size={15} />
       </button>
     </div>
   )
@@ -156,7 +157,8 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
       <div className="tag-manager-head">
         <h3>标签管理</h3>
         <button className="ghost-btn" onClick={() => setShowAdd(true)}>
-          ➕ 添加标签
+          <Plus size={14} />
+          添加标签
         </button>
       </div>
 

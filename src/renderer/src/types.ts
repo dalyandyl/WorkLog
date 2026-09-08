@@ -1,4 +1,5 @@
 export type {
+  AccentColor,
   AppSettings,
   AttachmentMeta,
   ExportOptions,

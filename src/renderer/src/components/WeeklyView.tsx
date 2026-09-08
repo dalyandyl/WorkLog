@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  CheckSquare,
+  PenLine,
+  Square,
+  StickyNote
+} from 'lucide-react'
 import type { Tag, Task, WeekInfo } from '../types'
 import { toDateStr, weekdayOf, weekInfoOf } from '../utils/date'
 import MarkdownEditor from './MarkdownEditor'
@@ -49,7 +57,7 @@ function DayBlock({
               title="查看任务详情"
             >
               <div className="weekly-task-main">
-                <span className="weekly-check">{t.done ? '☑' : '☐'}</span>
+                <span className="weekly-check">{t.done ? <CheckSquare size={14} /> : <Square size={14} />}</span>
                 <span className="weekly-task-title">{t.title}</span>
                 <span className="weekly-task-done-at muted">
                   派发 {new Date(t.publishedAt).toLocaleString()}
@@ -75,7 +83,7 @@ function DayBlock({
                 <div className="weekly-subtasks">
                   {(t.subtasks ?? []).map((st) => (
                     <div key={st.id} className={'weekly-subtask' + (st.done ? ' done' : '')}>
-                      <span className="weekly-check">{st.done ? '☑' : '☐'}</span>
+                      <span className="weekly-check">{st.done ? <CheckSquare size={14} /> : <Square size={14} />}</span>
                       <span className="weekly-subtask-title">{st.title}</span>
                     </div>
                   ))}
@@ -186,7 +194,8 @@ export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: We
         <div className="weekly-summary-head">
           <h3>周总结</h3>
           <button className="ghost-btn" onClick={() => setShowSummary(true)}>
-            ✍️ 填写周报总结
+            <PenLine size={14} />
+            填写周报总结
           </button>
         </div>
         {summaryLoaded ? (
@@ -221,9 +230,15 @@ export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: We
           <div className="publish-detail">
             <h3 className="publish-detail-title">{detailTask.title || '未命名任务'}</h3>
             <div className="task-time-info">
-              <span>📅 派发：{new Date(detailTask.publishedAt).toLocaleString()}</span>
+              <span>
+                <CalendarDays size={13} />
+                派发：{new Date(detailTask.publishedAt).toLocaleString()}
+              </span>
               {detailTask.completedAt && (
-                <span>✅ 完成：{new Date(detailTask.completedAt).toLocaleString()}</span>
+                <span>
+                  <CheckCircle2 size={13} />
+                  完成：{new Date(detailTask.completedAt).toLocaleString()}
+                </span>
               )}
             </div>
             <div className="tag-chips">
@@ -246,7 +261,7 @@ export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: We
               <div className="subtask-list read">
                 {(detailTask.subtasks ?? []).map((st) => (
                   <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
-                    <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+                    <span className="subtask-check">{st.done ? <CheckSquare size={13} /> : <Square size={13} />}</span>
                     <span className="subtask-title">{st.title}</span>
                   </div>
                 ))}
@@ -254,7 +269,10 @@ export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: We
             )}
             {(detailTask.note && detailTask.note.trim()) && (
               <div className="task-note">
-                <div className="task-note-label">📝 备注</div>
+                <div className="task-note-label">
+                  <StickyNote size={13} />
+                  备注
+                </div>
                 <div className="task-note-view">{detailTask.note}</div>
               </div>
             )}

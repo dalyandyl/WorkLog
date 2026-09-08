@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RotateCcw, Trash2 } from 'lucide-react'
 import type { TrashItem } from '../types'
 
 interface TrashViewProps {
@@ -72,10 +73,11 @@ export default function TrashView({ onStatus, onRestored }: TrashViewProps) {
               </div>
               <div className="publish-record-actions">
                 <button className="ghost-btn" onClick={() => restore(item)} title="恢复到原日期">
-                  ↺ 恢复
+                  <RotateCcw size={14} />
+                  恢复
                 </button>
                 <button className="icon-btn danger" onClick={() => remove(item)} title="永久删除">
-                  🗑
+                  <Trash2 size={15} />
                 </button>
               </div>
             </div>

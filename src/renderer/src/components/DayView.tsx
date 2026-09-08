@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CalendarDays, CheckCircle2, Save, StickyNote, X } from 'lucide-react'
 import type { Subtask, Tag, Task } from '../types'
 import { toDateStr, weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
@@ -227,9 +228,15 @@ export default function DayView({
                     </div>
                   )}
                   <div className="task-times muted">
-                    <span>📅 派发于 {new Date(t.publishedAt).toLocaleString()}</span>
+                    <span>
+                      <CalendarDays size={12} />
+                      派发于 {new Date(t.publishedAt).toLocaleString()}
+                    </span>
                     {t.completedAt && (
-                      <span>✅ 完成于 {new Date(t.completedAt).toLocaleString()}</span>
+                      <span>
+                        <CheckCircle2 size={12} />
+                        完成于 {new Date(t.completedAt).toLocaleString()}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -249,10 +256,10 @@ export default function DayView({
                       onChange={(e) => setEditTitle(e.target.value)}
                     />
                     <button className="icon-btn primary" onClick={saveEdit} title="保存（所有天同步）">
-                      💾
+                      <Save size={15} />
                     </button>
                     <button className="icon-btn" onClick={cancelEdit} title="取消">
-                      ✕
+                      <X size={15} />
                     </button>
                   </div>
                   <TagPicker
@@ -265,7 +272,10 @@ export default function DayView({
                     <SubtaskEditor subtasks={editSubtasks} tags={tags} onChange={setEditSubtasks} />
                   </div>
                   <div className="task-note">
-                    <div className="task-note-label">📝 备注</div>
+                    <div className="task-note-label">
+                      <StickyNote size={13} />
+                      备注
+                    </div>
                     <textarea
                       className="task-note-input"
                       placeholder="给这个任务简单备注…（保存后随任务在所有天共享）"

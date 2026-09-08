@@ -18,6 +18,7 @@ export function settingsPath(root: string): string {
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
+  accent: 'blue',
   reminder: { enabled: false, time: '18:00' },
   webdav: {
     enabled: false,
@@ -49,6 +50,7 @@ export async function readSettings(root: string): Promise<AppSettings> {
   const s = await readJson<Partial<AppSettings>>(settingsPath(root), {})
   return {
     theme: s.theme ?? DEFAULT_SETTINGS.theme,
+    accent: s.accent ?? DEFAULT_SETTINGS.accent,
     reminder: {
       enabled: s.reminder?.enabled ?? DEFAULT_SETTINGS.reminder.enabled,
       time: s.reminder?.time ?? DEFAULT_SETTINGS.reminder.time

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CalendarCheck2, CheckCircle2, ListTodo, TrendingUp } from 'lucide-react'
 import type { MonthStats } from '../types'
 import DatePicker from './DatePicker'
 
@@ -88,20 +89,32 @@ export default function StatsView({ date }: StatsViewProps) {
 
       <div className="stat-cards">
         <div className="stat-card">
+          <span className="stat-icon">
+            <CalendarCheck2 size={18} />
+          </span>
           <div className="stat-num">{stats.daysWithTasks}</div>
           <div className="stat-label">
             记录天数 / {stats.totalDays}
           </div>
         </div>
         <div className="stat-card">
+          <span className="stat-icon">
+            <ListTodo size={18} />
+          </span>
           <div className="stat-num">{stats.totalTasks}</div>
           <div className="stat-label">任务总数</div>
         </div>
         <div className="stat-card">
+          <span className="stat-icon">
+            <CheckCircle2 size={18} />
+          </span>
           <div className="stat-num">{stats.doneTasks}</div>
           <div className="stat-label">已完成</div>
         </div>
         <div className="stat-card">
+          <span className="stat-icon">
+            <TrendingUp size={18} />
+          </span>
           <div className="stat-num">{rate}%</div>
           <div className="stat-label">
             完成率（{stats.pendingTasks} 未完成）

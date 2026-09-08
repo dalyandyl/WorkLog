@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { toDateStr } from '../utils/date'
 import { holidayInfoOf, isRestDay, loadHolidayYear, refreshHolidayYear } from '../utils/holidays'
 import DatePicker from './DatePicker'
@@ -132,7 +133,7 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
           回到今天
         </button>
         <button className="today-btn cal-refresh-btn" onClick={refreshCalendar} title="联网重新拉取当前年份节假日">
-          {refreshing ? '更新中…' : '🔄 更新日历'}
+          {refreshing ? '更新中…' : <><RefreshCw size={13} /> 更新日历</>}
         </button>
       </div>
       {refreshMsg && <div className="cal-refresh-msg">{refreshMsg}</div>}

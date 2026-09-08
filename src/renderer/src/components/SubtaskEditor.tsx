@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check, Plus, X } from 'lucide-react'
 import type { Subtask, Tag } from '../types'
 
 /** 子任务编辑器（发布表单 / 日报编辑 复用） */
@@ -34,7 +35,7 @@ export default function SubtaskEditor({
           }}
         />
         <button className="icon-btn primary" title="添加子任务" onClick={addSub}>
-          ＋
+          <Plus size={15} />
         </button>
       </div>
       {subtasks.length > 0 && (
@@ -77,7 +78,7 @@ export default function SubtaskEditor({
                 title="删除子任务"
                 onClick={() => onChange(subtasks.filter((s) => s.id !== st.id))}
               >
-                ✕
+                <X size={15} />
               </button>
             </div>
           ))}
@@ -107,7 +108,7 @@ export default function SubtaskEditor({
               >
                 <span className="tag-dot" style={{ background: t.color }} />
                 {t.name}
-                {active && ' ✓'}
+                {active && <Check size={13} />}
               </button>
             )
           })}

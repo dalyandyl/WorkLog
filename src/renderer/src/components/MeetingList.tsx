@@ -1,4 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  CalendarDays,
+  Download,
+  FolderOpen,
+  Image as ImageIcon,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2
+} from 'lucide-react'
 import type { Meeting, Tag } from '../types'
 import Modal from './Modal'
 import Drawer from './Drawer'
@@ -53,7 +63,10 @@ function MeetingDetail({
     <div className="meeting-detail">
       <div className="meeting-detail-meta">
         <h3 className="meeting-detail-title">{meeting.title || '未命名会议'}</h3>
-        <span className="meeting-detail-date">📅 {meeting.date}</span>
+        <span className="meeting-detail-date">
+          <CalendarDays size={13} />
+          {meeting.date}
+        </span>
         <div className="meeting-card-tags">
           {meeting.tags.map((id) => {
             const t = tagMap.get(id)
@@ -73,14 +86,14 @@ function MeetingDetail({
           <div className="meeting-attach-list">
             {meeting.attachments.map((a) => (
               <div key={a.id} className="meeting-attach-item">
-                <span className="attach-icon">{a.type === 'image' ? '🖼' : '📎'}</span>
+                <span className="attach-icon">{a.type === 'image' ? <ImageIcon size={14} /> : <Paperclip size={14} />}</span>
                 <span className="attach-name" title={a.name}>{a.name}</span>
                 <button
                   className="icon-btn"
                   title="打开附件"
                   onClick={() => void window.api.openAttachment(a.url)}
                 >
-                  📂
+                  <FolderOpen size={15} />
                 </button>
               </div>
             ))}
@@ -95,9 +108,9 @@ function MeetingDetail({
       />
 
       <div className="meeting-detail-actions">
-        <button className="action-btn save-btn" onClick={onEdit}>✏️ 编辑</button>
-        <button className="ghost-btn" onClick={onExport}>⬇ 导出</button>
-        <button className="icon-btn danger" onClick={onDelete} title="删除会议">🗑</button>
+        <button className="action-btn save-btn" onClick={onEdit}><Pencil size={14} /> 编辑</button>
+        <button className="ghost-btn" onClick={onExport}><Download size={14} /> 导出</button>
+        <button className="icon-btn danger" onClick={onDelete} title="删除会议"><Trash2 size={15} /></button>
       </div>
     </div>
   )
@@ -207,7 +220,7 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           ) : null
         })}
         {m.attachments.length > 0 && (
-          <span className="meeting-attach-count">📎 {m.attachments.length}</span>
+          <span className="meeting-attach-count"><Paperclip size={12} /> {m.attachments.length}</span>
         )}
       </>
     )
@@ -219,14 +232,17 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
       <div key={m.id} className="meeting-card" onClick={() => setDetail(m)}>
         <div className="meeting-card-info">
           <h4 className="meeting-title">{m.title || '未命名会议'}</h4>
-          <span className="meeting-date-time">📅 {m.date}</span>
+          <span className="meeting-date-time">
+            <CalendarDays size={12} />
+            {m.date}
+          </span>
           {summary && <p className="meeting-card-summary">{truncate(summary, 140)}</p>}
           <div className="meeting-card-tags">{renderTags(m)}</div>
         </div>
         <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown">⬇</button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议">✏️</button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议">🗑</button>
+          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
+          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
+          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
         </div>
       </div>
     )
@@ -242,9 +258,9 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           <div className="meeting-card-tags">{renderTags(m)}</div>
         </div>
         <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown">⬇</button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议">✏️</button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议">🗑</button>
+          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
+          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
+          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
         </div>
       </div>
     )
@@ -294,7 +310,8 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           </button>
         </div>
         <button className="new-meeting-btn" onClick={openNew}>
-          ➕ 新建会议
+          <Plus size={14} />
+          新建会议
         </button>
       </div>
 
@@ -309,7 +326,10 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
         <div className="meeting-timeline">
           {byDate.map(([d, list]) => (
             <div key={d} className="timeline-group">
-              <div className="timeline-date-header">📅 {dateHeader(d)}</div>
+              <div className="timeline-date-header">
+                <CalendarDays size={12} />
+                {dateHeader(d)}
+              </div>
               {list.map((m) => renderTimelineItem(m))}
             </div>
           ))}

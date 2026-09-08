@@ -11,6 +11,15 @@ import { Highlight } from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
 import { Image } from '@tiptap/extension-image'
+import {
+  FolderOpen,
+  Highlighter,
+  Image as ImageIcon,
+  Paperclip,
+  Save,
+  TextQuote,
+  Trash2
+} from 'lucide-react'
 import type { AttachmentMeta, Meeting, Tag } from '../types'
 import TagPicker from './TagPicker'
 import DatePicker from './DatePicker'
@@ -255,7 +264,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
           <button className="toolbar-btn" onClick={toggleItalic} title="斜体"><i>I</i></button>
           <button className="toolbar-btn" onClick={toggleUnderline} title="下划线"><u>U</u></button>
           <button className="toolbar-btn" onClick={toggleStrike} title="删除线"><s>S</s></button>
-          <button className="toolbar-btn" onClick={toggleHighlight} title="高亮">🖍</button>
+          <button className="toolbar-btn" onClick={toggleHighlight} title="高亮"><Highlighter size={15} /></button>
           <span className="toolbar-divider" />
           <button className="toolbar-btn" onClick={() => setHeading(1)} title="标题 1">H1</button>
           <button className="toolbar-btn" onClick={() => setHeading(2)} title="标题 2">H2</button>
@@ -263,10 +272,10 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
           <span className="toolbar-divider" />
           <button className="toolbar-btn" onClick={toggleBulletList} title="无序列表">•</button>
           <button className="toolbar-btn" onClick={toggleOrderedList} title="有序列表">1.</button>
-          <button className="toolbar-btn" onClick={toggleBlockquote} title="引用">❝</button>
+          <button className="toolbar-btn" onClick={toggleBlockquote} title="引用"><TextQuote size={15} /></button>
           <button className="toolbar-btn" onClick={insertTable} title="插入表格">⊞</button>
           <button className="toolbar-btn" onClick={insertCodeBlock} title="代码块">&lt;/&gt;</button>
-          <button className="toolbar-btn" onClick={() => imageInputRef.current?.click()} title="插入图片">🖼</button>
+          <button className="toolbar-btn" onClick={() => imageInputRef.current?.click()} title="插入图片"><ImageIcon size={15} /></button>
         </div>
         <div ref={editorContainerRef} className="rich-editor-content" />
       </div>
@@ -275,10 +284,12 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
       <div className="meeting-attach-bar">
         <span className="attach-label">附件</span>
         <button className="md-mini-btn" onClick={() => imageInputRef.current?.click()}>
-          🖼 图片
+          <ImageIcon size={14} />
+          图片
         </button>
         <button className="md-mini-btn" onClick={() => void pickAttachments()}>
-          📎 文件
+          <Paperclip size={14} />
+          文件
         </button>
         <span className="attach-hint">支持粘贴 / 拖拽图片</span>
       </div>
@@ -286,17 +297,19 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
         <div className="meeting-attach-list">
           {attachments.map((a) => (
             <div key={a.id} className="meeting-attach-item">
-              <span className="attach-icon">{a.type === 'image' ? '🖼' : '📎'}</span>
+              <span className="attach-icon">
+                {a.type === 'image' ? <ImageIcon size={14} /> : <Paperclip size={14} />}
+              </span>
               <span className="attach-name" title={a.name}>{a.name}</span>
               <button
                 className="icon-btn"
                 title="打开附件"
                 onClick={() => void window.api.openAttachment(a.url)}
               >
-                📂
+                <FolderOpen size={15} />
               </button>
               <button className="icon-btn danger" title="删除附件" onClick={() => removeAttachment(a)}>
-                🗑
+                <Trash2 size={15} />
               </button>
             </div>
           ))}
@@ -306,7 +319,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
       {/* 底部操作 */}
       <div className="meeting-actions">
         <button className="action-btn cancel-btn" onClick={onClose}>取消</button>
-        <button className="action-btn save-btn" onClick={save}>💾 保存</button>
+        <button className="action-btn save-btn" onClick={save}><Save size={14} /> 保存</button>
       </div>
 
       {/* 隐藏的图片文件选择 */}

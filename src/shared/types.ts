@@ -2,6 +2,9 @@
 
 export type ThemeSetting = 'light' | 'dark' | 'system'
 
+/** 界面强调色（主题色）预设 */
+export type AccentColor = 'blue' | 'indigo' | 'violet' | 'green' | 'rose' | 'amber'
+
 /** 自动更新镜像源：auto=自动（Gitee 优先，失败回退 GitHub）/ gitee / github */
 export type UpdateSource = 'auto' | 'gitee' | 'github'
 
@@ -24,6 +27,8 @@ export interface WebdavConfig {
 
 export interface AppSettings {
   theme: ThemeSetting
+  /** 界面强调色 */
+  accent: AccentColor
   reminder: ReminderSetting
   webdav: WebdavConfig
   /** 自动更新镜像源 */

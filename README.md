@@ -89,7 +89,7 @@ worklog/
 │   │   └── tray.ts      # 托盘 + 每日提醒
 │   ├── preload/         # 安全桥接层
 │   └── renderer/src/
-│       ├── App.tsx              # 顶部功能栏（发布/日报/周报/统计/报表/标签/回收站）+ 左侧菜单（日历/设置）
+│       ├── App.tsx              # 左侧导航（日报/周报/发布/统计/报表/标签/会议/回收站）+ 日历 + 设置
 │       └── components/
 │           ├── DayView.tsx      # 日报（卡片任务列表 + 详情两态 + 备注）
 │           ├── TaskDetail.tsx   # 任务详情（只读 + 备注编辑）
@@ -100,7 +100,7 @@ worklog/
 │           ├── StatsView.tsx    # 区间统计
 │           ├── TagPicker.tsx / TagManager.tsx / TrashView.tsx
 │           ├── RichView.tsx / SearchBox.tsx / DatePicker.tsx
-│           ├── Calendar.tsx / SettingsModal.tsx / Drawer.tsx / Modal.tsx
+│           ├── Calendar.tsx / DropdownSelect.tsx / SettingsModal.tsx / Drawer.tsx / Modal.tsx
 ├── scripts/
 │   ├── publish-gitee.ps1    # 发布到 Gitee 的自动化脚本
 │   ├── publish-github.ps1   # 发布到 GitHub 的自动化脚本
@@ -113,24 +113,11 @@ worklog/
 
 ## 自动更新（Gitee / GitHub 双镜像源）
 
-- **原理**：主进程自行实现「检测 → 下载 → sha512 校验 → 安装」，支持两个下载源：
-  - **Gitee**：调用 Gitee API v5，从仓库 `dadalia1/worklog` 的**发行版**拉取 `latest.yml` 与安装包附件（需令牌）。
-  - **GitHub**：调用 GitHub Releases API，从仓库 `dalyandyl/WorkLog` 的**发行版**拉取（公开仓库免令牌，附件直链下载）。
-- **镜像源选择**：设置 → 关于系统 →「更新镜像源」下拉，可选 **自动 / Gitee / GitHub**。自动 = Gitee 优先，失败或无结果自动回退 GitHub。选择会保存到设置，重启后仍生效。
-- **配置**：仓库/令牌在 `src/main/updater-config.ts`（已被 .gitignore 忽略，含真实令牌，勿提交；模板见 `updater-config.example.ts`）。
-- **发布新版本**（两端同步发布）：
-  1. 升级 `package.json` 的 `version`（如 `1.4.2`）；
-  2. 在 `CHANGELOG.md` 顶部按版本号新增章节（发布脚本会自动读取该章节作为 Release 备注；也可用 `npm run publish:xxx -- -Message "备注"` 临时指定）；
-  3. `npm run publish:gitee` —— 构建 → 打包 NSIS → 创建/更新 Gitee 发行版 `v<版本号>` → 上传 `latest.yml` + `setup.exe`；
-  4. `npm run publish:github` —— 同上发布到 GitHub；
-  5. 打标签：`git tag -a v<版本> -m "说明"` 并推送两端（作为回滚锚点）。
-- **令牌**：
-  - Gitee：`src/main/updater-config.ts`（或环境变量 `GITEE_TOKEN`，勾 `projects` 权限即可）；
-  - GitHub：环境变量 `GH_TOKEN`（classic 令牌，勾 `repo` 权限，发布 Release 用；公开仓库运行时免令牌）。
-- **注意事项**：
-  - 版本号比已安装版本高才会提示更新。
-  - 安装包未做代码签名，Windows SmartScreen 提示属正常现象。
-  - 两端需发布同名版本的 `latest.yml` 与安装包；若某一端未发布，对应镜像源会提示无更新。
-- **源码与回滚**：源码已推送 gitee（`origin/master`）与 github（`github/master`），每个版本对应一个 git tag（如 `v1.4.2`）。
-  - 回滚到某版本的**源码**：`git fetch --all && git checkout v1.4.1`
-  - 回滚到某版本的**安装包**：到对应平台发行版页（`/releases`）下载旧版本附件。
+应用内置自动更新：检测 → 下载 → sha512 校验 → 安装，支持 Gitee / GitHub 双镜像源，可在「设置 → 关于系统 → 更新镜像源」切换（自动 = Gitee 优先，失败回退 GitHub）。
+
+发布新版本（两端同步）：
+1. 升级 `package.json` 的 `version`，并在 `CHANGELOG.md` 顶部新增对应版本章节（自动作为 Release 说明）；
+2. 执行 `npm run publish:gitee`、`npm run publish:github`（令牌：Gitee 填 `src/main/updater-config.ts`，GitHub 用环境变量 `GH_TOKEN`）；
+3. 打标签并推送两端：`git tag -a v<版本> -m "说明"`。
+
+> 版本号高于已安装版本才会提示更新；安装包未做代码签名，Windows SmartScreen 提示属正常。
