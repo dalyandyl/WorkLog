@@ -20,8 +20,6 @@
     "publish:github": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-github.ps1"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-code-block-lowlight": "^3.31.3",
     "@tiptap/extension-color": "^3.31.3",
@@ -37,12 +35,13 @@
     "adm-zip": "^0.6.0",
     "js-yaml": "^4.1.0",
     "lowlight": "^3.3.0",
-    "lucide-react": "^1.43.0",
     "semver": "^7.7.3",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2"
   },
   "devDependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@tiptap/extension-image": "^3.31.3",
     "@tiptap/extension-link": "^3.31.3",
     "@types/js-yaml": "^4.0.9",
@@ -57,6 +56,7 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "katex": "^0.18.4",
+    "lucide-react": "^1.43.0",
     "markdown-it": "^15.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
