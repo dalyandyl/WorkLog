@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WorkLog_WinUI.Pages.MeetingPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+        <FontIcon Glyph="&#xE716;" FontSize="44" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+        <TextBlock Style="{StaticResource PageTitle}" HorizontalAlignment="Center" Text="会议纪要" />
+        <TextBlock HorizontalAlignment="Center" Style="{StaticResource PageSubtitle}" Text="待实现：富文本纪要 / 标签 / 附件 / 导出 Markdown（对齐 Electron 版 MeetingList）" />
+    </StackPanel>
+</Page>

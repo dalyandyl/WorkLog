@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WorkLog_WinUI.Pages.DayPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WorkLog_WinUI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="36,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 标题 + 日期选择 -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="TitleText"
+                Style="{StaticResource PageTitle}"
+                Text="日报" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="TodayBtn" Content="今天" Click="TodayBtn_Click" />
+                <DatePicker x:Name="DatePick" DateChanged="DatePick_DateChanged" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 统计摘要 -->
+        <TextBlock x:Name="SummaryText" Grid.Row="1" Style="{StaticResource PageSubtitle}" Margin="0,0,0,16" />
+
+        <!-- 任务列表 -->
+        <ListView x:Name="TaskList" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="False">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:DayRow">
+                    <Grid Padding="12,10" ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <CheckBox
+                            Grid.Column="0"
+                            IsChecked="{x:Bind Done, Mode=OneWay}"
+                            IsEnabled="False"
+                            MinWidth="0" />
+
+                        <Grid Grid.Column="1" ColumnSpacing="10" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Text="{x:Bind Title}"
+                                TextTrimming="CharacterEllipsis"
+                                VerticalAlignment="Center" />
+                            <Border
+                                x:Name="SubtaskBadge"
+                                Grid.Column="1"
+                                CornerRadius="10"
+                                Padding="8,2"
+                                Visibility="{x:Bind SubtaskBadgeVis}"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                    Text="{x:Bind SubtaskSummary}" />
+                            </Border>
+                            <!-- 标签色点 -->
+                            <ItemsControl Grid.Column="2" ItemsSource="{x:Bind TagDots}" VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:TagDot">
+                                        <Ellipse Width="8" Height="8">
+                                            <Ellipse.Fill>
+                                                <SolidColorBrush Color="{x:Bind Color}" />
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- 空状态 -->
+        <StackPanel
+            x:Name="EmptyState"
+            Grid.Row="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="12"
+            Visibility="Collapsed">
+            <FontIcon Glyph="&#xE8BF;" FontSize="44" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource PageSubtitle}"
+                Text="这一天还没有任务" />
+        </StackPanel>
+    </Grid>
+</Page>

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WorkLog.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WorkLog.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

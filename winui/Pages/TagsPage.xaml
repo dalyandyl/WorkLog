@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WorkLog_WinUI.Pages.TagsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WorkLog_WinUI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="36,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Style="{StaticResource PageTitle}" Text="标签" />
+
+        <!-- 标签墙（读取 Electron 版 tags.json，只读） -->
+        <GridView x:Name="TagWall" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="False">
+            <GridView.ItemTemplate>
+                <DataTemplate x:DataType="local:TagChip">
+                    <Border
+                        Padding="14,7"
+                        CornerRadius="14"
+                        BorderThickness="1.5">
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="{x:Bind Color}" />
+                        </Border.BorderBrush>
+                        <Border.Background>
+                            <SolidColorBrush Color="{x:Bind Color}" Opacity="0.12" />
+                        </Border.Background>
+                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" />
+                    </Border>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
+
+        <StackPanel
+            x:Name="EmptyState"
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="12"
+            Visibility="Collapsed">
+            <FontIcon Glyph="&#xE8EC;" FontSize="44" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource PageSubtitle}"
+                Text="还没有标签，在 Electron 版创建后会同步到这里" />
+        </StackPanel>
+    </Grid>
+</Page>

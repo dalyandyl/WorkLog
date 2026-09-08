@@ -10,3 +10,7 @@ src/main/updater-config.ts
 
 # ÊÓ¾õ¹¤¾ßÁÙÊ±²úÎï
 .dsh-vision-router/
+
+# WinUI ç‰ˆæ„å»ºäº§ç‰©
+winui/bin/
+winui/obj/
