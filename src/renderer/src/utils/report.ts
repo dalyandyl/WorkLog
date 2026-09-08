@@ -28,7 +28,7 @@ export function reportRangeLabel(g: ReportGranularity, anchor: string, dates: st
   if (g === 'day') return anchor
   if (g === 'week') {
     const wi = weekInfoOf(anchor)
-    return `${wi.weekKey}（${dates[0]} ~ ${dates[dates.length - 1]}）`
+    return `${wi.weekKey}（${dates[0].slice(5)} ~ ${dates[dates.length - 1].slice(5)}）`
   }
   if (g === 'month') return `${anchor.slice(0, 7)}`
   return `${anchor.slice(0, 4)}`

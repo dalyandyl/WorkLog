@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings } from '../types'
+import { BookOpenText, RefreshCw } from 'lucide-react'
+import type { AccentColor, AppSettings } from '../types'
 import Modal from './Modal'
 
 interface SettingsModalProps {
@@ -18,6 +19,15 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'backup', label: '数据备份' },
   { key: 'sync', label: '跨设备同步' },
   { key: 'about', label: '关于系统' }
+]
+
+const ACCENT_OPTIONS: { key: AccentColor; label: string; color: string }[] = [
+  { key: 'blue', label: '蓝色', color: '#3b82f6' },
+  { key: 'indigo', label: '靛蓝', color: '#6366f1' },
+  { key: 'violet', label: '紫色', color: '#8b5cf6' },
+  { key: 'green', label: '绿色', color: '#10b981' },
+  { key: 'rose', label: '玫红', color: '#f43f5e' },
+  { key: 'amber', label: '琥珀', color: '#f59e0b' }
 ]
 
 export default function SettingsModal({ open, settings, onChange, onClose, onStatus }: SettingsModalProps) {
@@ -90,6 +100,9 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
   }
   function setTheme(t: AppSettings['theme']): void {
     onChange({ ...settings, theme: t })
+  }
+  function setAccent(a: AccentColor): void {
+    onChange({ ...settings, accent: a })
   }
 
   async function doBackup(): Promise<void> {
@@ -183,6 +196,21 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                   </label>
                 ))}
               </div>
+              <h4>强调色</h4>
+              <div className="accent-swatches">
+                {ACCENT_OPTIONS.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    className={'accent-swatch' + (settings.accent === a.key ? ' active' : '')}
+                    style={{ background: a.color }}
+                    title={a.label}
+                    aria-label={a.label}
+                    onClick={() => setAccent(a.key)}
+                  />
+                ))}
+              </div>
+              <div className="settings-hint">强调色会应用到导航选中态、按钮、链接等界面元素</div>
             </div>
           )}
 
@@ -280,7 +308,9 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
             <div className="settings-tab">
               <h4>关于系统</h4>
               <div className="about-app">
-                <div className="about-logo">📓</div>
+                <div className="about-logo">
+                <BookOpenText size={28} />
+              </div>
                 <div>
                   <div className="about-name">日志工具 WorkLog</div>
                   <div className="about-version">版本 v{info?.appVersion ?? '…'}</div>
@@ -316,7 +346,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                   updStatus === 'none' ||
                   updStatus === 'error' ? (
                     <button className="ghost-btn" onClick={check} disabled={checking}>
-                      {checking ? '检查中…' : '🔄 检查更新'}
+                      {checking ? '检查中…' : <><RefreshCw size={14} /> 检查更新</>}
                     </button>
                   ) : null}
                   {updStatus === 'available' && (

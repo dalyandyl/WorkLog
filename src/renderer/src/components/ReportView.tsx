@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Eye } from 'lucide-react'
 import type { MonthStats, Tag, Task } from '../types'
 import { toDateStr } from '../utils/date'
 import { renderMarkdown } from '../utils/markdown'
@@ -10,6 +11,7 @@ import {
   type ReportPart
 } from '../utils/report'
 import DatePicker from './DatePicker'
+import DropdownSelect from './DropdownSelect'
 import RichView from './RichView'
 import Modal from './Modal'
 
@@ -23,6 +25,12 @@ const GRAN_OPTIONS: { value: ReportGranularity; label: string }[] = [
   { value: 'week', label: '按周' },
   { value: 'month', label: '按月' },
   { value: 'year', label: '按年' }
+]
+
+const PART_OPTIONS: { value: ReportPart; label: string }[] = [
+  { value: 'summary', label: '汇总' },
+  { value: 'detail', label: '明细' },
+  { value: 'all', label: '汇总+明细' }
 ]
 
 const PART_LABEL: Record<ReportPart, string> = {
@@ -110,60 +118,45 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
     <div className="report-view">
       <div className="date-heading">
         <h2>日志报表</h2>
-        <span className="weekday">汇总统计 + 任务明细，支持导出 Markdown / Word</span>
+        <span className="report-range-label">{rangeLabel}</span>
       </div>
 
       <div className="report-controls">
         <div className="publish-filter">
-          <select
-            className="gran-select"
+          <DropdownSelect
             value={granularity}
-            onChange={(e) => setGranularity(e.target.value as ReportGranularity)}
+            options={GRAN_OPTIONS}
+            onChange={(v) => setGranularity(v as ReportGranularity)}
             title="报表粒度"
-          >
-            {GRAN_OPTIONS.map((g) => (
-              <option key={g.value} value={g.value}>
-                {g.label}
-              </option>
-            ))}
-          </select>
+          />
           <DatePicker value={anchor} onChange={setAnchor} title={anchorTitle()} />
-          <span className="report-range-label">当前范围：{rangeLabel}</span>
         </div>
         <div className="report-actions">
           <div className="report-export-group">
             <span className="report-export-label">MD</span>
             <button className="icon-btn" onClick={() => showPreview('md')} title="预览 Markdown">
-              👁
+              <Eye size={15} />
             </button>
             <button className="ghost-btn" onClick={() => exportMd(mdPart)} disabled={!stats}>导出</button>
-            <select
-              className="gran-select"
+            <DropdownSelect
               value={mdPart}
-              onChange={(e) => setMdPart(e.target.value as ReportPart)}
+              options={PART_OPTIONS}
+              onChange={(v) => setMdPart(v as ReportPart)}
               title="导出内容"
-            >
-              <option value="summary">汇总</option>
-              <option value="detail">明细</option>
-              <option value="all">汇总+明细</option>
-            </select>
+            />
           </div>
           <div className="report-export-group">
             <span className="report-export-label">Word</span>
             <button className="icon-btn" onClick={() => showPreview('word')} title="预览 Word">
-              👁
+              <Eye size={15} />
             </button>
             <button className="ghost-btn" onClick={() => exportWord(wordPart)} disabled={!stats}>导出</button>
-            <select
-              className="gran-select"
+            <DropdownSelect
               value={wordPart}
-              onChange={(e) => setWordPart(e.target.value as ReportPart)}
+              options={PART_OPTIONS}
+              onChange={(v) => setWordPart(v as ReportPart)}
               title="导出内容"
-            >
-              <option value="summary">汇总</option>
-              <option value="detail">明细</option>
-              <option value="all">汇总+明细</option>
-            </select>
+            />
           </div>
         </div>
       </div>

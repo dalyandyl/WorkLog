@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BookOpenText, RefreshCw } from 'lucide-react'
 import Modal from './Modal'
 
 interface AboutModalProps {
@@ -72,7 +73,9 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
     <Modal open={open} title="关于系统" width={460} onClose={onClose}>
       <div className="about-body">
         <div className="about-app">
-          <div className="about-logo">📓</div>
+          <div className="about-logo">
+            <BookOpenText size={28} />
+          </div>
           <div>
             <div className="about-name">日志工具 WorkLog</div>
             <div className="about-version">版本 v{info?.appVersion ?? '…'}</div>
@@ -104,7 +107,7 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
         <div className="about-update">
           <div className="about-update-actions">
             <button className="ghost-btn" onClick={check} disabled={checking}>
-              {checking ? '检查中…' : '🔄 检查更新'}
+              {checking ? '检查中…' : <><RefreshCw size={14} /> 检查更新</>}
             </button>
             {updateState.status === 'downloaded' && (
               <button className="ghost-btn" onClick={install}>

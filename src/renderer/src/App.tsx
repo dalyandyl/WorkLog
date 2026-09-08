@@ -1,4 +1,17 @@
 import { useEffect, useState } from 'react'
+import {
+  BarChart3,
+  BookOpenText,
+  CalendarDays,
+  CalendarRange,
+  ChevronDown,
+  FileText,
+  Send,
+  Settings,
+  Tags,
+  Trash2,
+  Users
+} from 'lucide-react'
 import Calendar from './components/Calendar'
 import SearchBox from './components/SearchBox'
 import StatsView from './components/StatsView'
@@ -15,6 +28,31 @@ import { toDateStr, weekInfoOf } from './utils/date'
 
 type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting'
 
+interface NavItem {
+  key: Mode
+  label: string
+  icon: typeof BarChart3
+  group: '日志' | '任务' | '分析' | '管理'
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { key: 'day', label: '日报', icon: CalendarDays, group: '日志' },
+  { key: 'week', label: '周报', icon: CalendarRange, group: '日志' },
+  { key: 'publish', label: '任务发布', icon: Send, group: '任务' },
+  { key: 'stats', label: '统计', icon: BarChart3, group: '分析' },
+  { key: 'report', label: '报表', icon: FileText, group: '分析' },
+  { key: 'tags', label: '标签', icon: Tags, group: '管理' },
+  { key: 'meeting', label: '会议', icon: Users, group: '管理' },
+  { key: 'trash', label: '回收站', icon: Trash2, group: '管理' }
+]
+
+const NAV_GROUPS: { name: '日志' | '任务' | '分析' | '管理' }[] = [
+  { name: '日志' },
+  { name: '任务' },
+  { name: '分析' },
+  { name: '管理' }
+]
+
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
   const [mode, setMode] = useState<Mode>('day')
@@ -25,6 +63,7 @@ export default function App() {
   })
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'system',
+    accent: 'blue',
     reminder: { enabled: false, time: '18:00' },
     webdav: {
       enabled: false,
@@ -43,6 +82,7 @@ export default function App() {
   const [status, setStatus] = useState('加载中…')
 
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [calOpen, setCalOpen] = useState(true)
 
   useEffect(() => {
     window.api.getStorageRoot().then(setStorageRoot)
@@ -55,7 +95,8 @@ export default function App() {
     const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches
     const isDark = settings.theme === 'dark' || (settings.theme === 'system' && sysDark)
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
-  }, [settings.theme])
+    document.documentElement.setAttribute('data-accent', settings.accent)
+  }, [settings.theme, settings.accent])
 
   function refreshTaskDates(): void {
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
@@ -86,32 +127,11 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">📔 日志工具</div>
-        <div className="mode-switch">
-          <button className={mode === 'day' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('day')}>
-            日报
-          </button>
-          <button className={mode === 'week' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('week')}>
-            周报
-          </button>
-          <button className={mode === 'publish' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('publish')}>
-            任务发布
-          </button>
-          <button className={mode === 'stats' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('stats')}>
-            统计
-          </button>
-          <button className={mode === 'report' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('report')}>
-            报表
-          </button>
-          <button className={mode === 'tags' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('tags')}>
-            标签
-          </button>
-          <button className={mode === 'meeting' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('meeting')}>
-            会议
-          </button>
-          <button className={mode === 'trash' ? 'mode-btn active' : 'mode-btn'} onClick={() => setMode('trash')}>
-            回收站
-          </button>
+        <div className="brand">
+          <span className="brand-icon">
+            <BookOpenText size={18} strokeWidth={2} />
+          </span>
+          <span className="brand-name">日志工具</span>
         </div>
         <div className="topbar-right">
           <SearchBox onPick={(d, taskId) => { setMode('day'); setDate(d); setDaySel({ date: d, taskId }) }} />
@@ -120,12 +140,40 @@ export default function App() {
 
       <div className="body">
         <aside className="sidebar">
-          <div className="sidebar-top">
-            <Calendar selected={date} markers={taskDates} onSelect={selectDate} />
+          <div className="sidebar-calendar">
+            <button className="sidebar-section-head" onClick={() => setCalOpen((v) => !v)}>
+              <span>日历</span>
+              <ChevronDown size={14} className={'chev' + (calOpen ? '' : ' flipped')} />
+            </button>
+            {calOpen && <Calendar selected={date} markers={taskDates} onSelect={selectDate} />}
           </div>
+
+          <nav className="sidebar-nav">
+            <h2 className="sidebar-heading">功能</h2>
+            {NAV_GROUPS.map((g) => (
+              <div className="nav-group" key={g.name}>
+                <div className="nav-group-label">{g.name}</div>
+                {NAV_ITEMS.filter((n) => n.group === g.name).map((n) => {
+                  const Icon = n.icon
+                  return (
+                    <button
+                      key={n.key}
+                      className={mode === n.key ? 'nav-btn active' : 'nav-btn'}
+                      onClick={() => setMode(n.key)}
+                    >
+                      <Icon size={17} strokeWidth={2} />
+                      <span>{n.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </nav>
+
           <div className="sidebar-bottom">
-            <button className="sidebar-tool-btn" onClick={() => setSettingsOpen(true)} title="设置">
-              ⚙️ 设置
+            <button className="nav-btn" onClick={() => setSettingsOpen(true)} title="设置">
+              <Settings size={17} strokeWidth={2} />
+              <span>设置</span>
             </button>
           </div>
         </aside>

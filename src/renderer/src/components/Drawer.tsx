@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 
 interface DrawerProps {
   open: boolean
@@ -26,7 +27,7 @@ export default function Drawer({ open, title, width = 560, onClose, children }: 
         <div className="wl-drawer-head">
           <h3>{title}</h3>
           <button className="wl-close" onClick={onClose} title="关闭">
-            ✕
+            <X size={16} />
           </button>
         </div>
         <div className="wl-drawer-body">{children}</div>

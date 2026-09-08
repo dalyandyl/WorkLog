@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 
 interface ModalProps {
   open: boolean
@@ -27,7 +28,7 @@ export default function Modal({ open, title, width = 640, height, onClose, child
         <div className="wl-modal-head">
           <h3>{title}</h3>
           <button className="wl-close" onClick={onClose} title="关闭">
-            ✕
+            <X size={16} />
           </button>
         </div>
         <div className="wl-modal-body">{children}</div>

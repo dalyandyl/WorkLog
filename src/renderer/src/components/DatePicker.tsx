@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { CalendarDays } from 'lucide-react'
 
 interface DatePickerProps {
   value: string // yyyy-mm-dd，空串表示未选
@@ -259,7 +260,7 @@ export default function DatePicker({
   return (
     <div className="dp" ref={ref}>
       <button className="dp-btn" onClick={() => setOpen((o) => !o)} title={title ?? '选择日期'}>
-        <span className="dp-icon">📅</span>
+        <CalendarDays size={13} className="dp-icon" />
         <span className="dp-text">{label || value || '选择日期'}</span>
       </button>
       {open && (portal ? createPortal(popup, document.body) : popup)}

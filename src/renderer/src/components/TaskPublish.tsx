@@ -1,4 +1,13 @@
 import { useEffect, useState } from 'react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  CheckSquare,
+  Plus,
+  Square,
+  StickyNote,
+  X
+} from 'lucide-react'
 import type { PublishRecord, Subtask, Tag, Task } from '../types'
 import { enumerateDates, toDateStr, weekInfoOf, type PublishGranularity } from '../utils/date'
 import MarkdownEditor from './MarkdownEditor'
@@ -101,7 +110,7 @@ function PendingTaskCard({
           onChange={(e) => onChange({ title: e.target.value })}
         />
         <button className="icon-btn danger" onClick={onRemove} title="移除该条">
-          ✕
+          <X size={15} />
         </button>
       </div>
 
@@ -322,7 +331,8 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
       <div className="date-heading">
         <h2>任务发布</h2>
         <button className="ghost-btn" onClick={openForm}>
-          ➕ 发布任务
+          <Plus size={14} />
+          发布任务
         </button>
         <span className="weekday">支持批量多任务派发；发布后自动同步到所选日期的日报中</span>
       </div>
@@ -481,7 +491,8 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
           </div>
           <div className="pending-actions">
             <button className="ghost-btn" onClick={addPending}>
-              ➕ 添加任务
+              <Plus size={14} />
+              添加任务
             </button>
             <button className="publish-btn" onClick={() => void publishAll()} disabled={pending.length === 0}>
               全部发布（{pending.length}）
@@ -495,9 +506,15 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
           <div className="publish-detail">
             <h3 className="publish-detail-title">{viewEntry.task.title || '未命名任务'}</h3>
             <div className="task-time-info">
-              <span>📅 派发：{new Date(viewEntry.task.publishedAt).toLocaleString()}</span>
+              <span>
+                <CalendarDays size={13} />
+                派发：{new Date(viewEntry.task.publishedAt).toLocaleString()}
+              </span>
               {viewEntry.task.completedAt && (
-                <span>✅ 完成：{new Date(viewEntry.task.completedAt).toLocaleString()}</span>
+                <span>
+                  <CheckCircle2 size={13} />
+                  完成：{new Date(viewEntry.task.completedAt).toLocaleString()}
+                </span>
               )}
             </div>
             <div className="tag-chips">
@@ -520,7 +537,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
               <div className="subtask-list read">
                 {(viewEntry.task.subtasks ?? []).map((st) => (
                   <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
-                    <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+                    <span className="subtask-check">{st.done ? <CheckSquare size={13} /> : <Square size={13} />}</span>
                     <span className="subtask-title">{st.title}</span>
                     <span className="subtask-tags">
                       {st.tags.map((id) => {
@@ -543,7 +560,10 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
             )}
             {viewEntry.task.note && viewEntry.task.note.trim() && (
               <div className="task-note">
-                <div className="task-note-label">📝 备注</div>
+                <div className="task-note-label">
+                  <StickyNote size={13} />
+                  备注
+                </div>
                 <div className="task-note-view">{viewEntry.task.note}</div>
               </div>
             )}
@@ -606,7 +626,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
               <div className="subtask-list read">
                 {(detail.subtasks ?? []).map((st) => (
                   <div key={st.id} className={'subtask-row' + (st.done ? ' done' : '')}>
-                    <span className="subtask-check">{st.done ? '☑' : '☐'}</span>
+                    <span className="subtask-check">{st.done ? <CheckSquare size={13} /> : <Square size={13} />}</span>
                     <span className="subtask-title">{st.title}</span>
                     <span className="subtask-tags">
                       {st.tags.map((id) => {

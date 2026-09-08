@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
@@ -87,7 +87,6 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    autoHideMenuBar: true,
     title: '日志工具',
     icon: appIconPath(),
     webPreferences: {
@@ -101,6 +100,10 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+
+  // 彻底移除窗口菜单栏：autoHideMenuBar 只是“隐藏”，按 Alt 仍会弹出默认的
+  // File/Edit/View/Window 菜单；只有真正移除菜单才能禁用这一行为。
+  mainWindow.removeMenu()
 
   // 关闭窗口 = 最小化到托盘，保持提醒可用；真正退出走托盘菜单
   mainWindow.on('close', (e) => {
@@ -157,6 +160,9 @@ app.whenReady().then(async () => {
   if (!gotTheLock) return // 第二个实例：已在上面请求退出，不再初始化任何东西
 
   app.setAppUserModelId('com.worklog.app')
+
+  // 移除 Electron 默认应用菜单（File/Edit/View/Window），避免任何窗口被自动赋予菜单
+  Menu.setApplicationMenu(null)
 
   // 关闭 Chromium 光标所在行的高亮（编辑器中出现黄框高亮一行的问题）
   // 禁用 GPU 着色器磁盘缓存与 HTTP 磁盘缓存：避免缓存目录无法移动/创建时报错
