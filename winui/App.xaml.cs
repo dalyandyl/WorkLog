@@ -22,12 +22,12 @@ public partial class App : Application
         MainWin.Activate();
 
         // 应用 WinUI 版保存的主题与窗口材质（默认：跟随系统 + Mica）
-        MainWin.ApplyTheme(Pages.SettingsPage.Current.Theme switch
+        MainWin.ApplyTheme(Services.SettingsPersistence.Theme switch
         {
             "light" => ElementTheme.Light,
             "dark" => ElementTheme.Dark,
             _ => ElementTheme.Default
         });
-        Pages.SettingsPage.ApplyBackdrop(MainWin, Pages.SettingsPage.Current.Backdrop);
+        Pages.SettingsPage.ApplyBackdrop(MainWin, Services.SettingsPersistence.Backdrop);
     }
 }

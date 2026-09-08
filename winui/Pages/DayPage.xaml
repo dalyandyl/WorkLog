@@ -15,7 +15,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 标题 + 日期选择 -->
+        <!-- 标题 + 日期选择 + 新建 -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -26,13 +26,25 @@
                 Style="{StaticResource PageTitle}"
                 Text="日报" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="AddBtn" Style="{StaticResource AccentButtonStyle}" Click="AddBtn_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE710;" FontSize="14" />
+                        <TextBlock Text="新建任务" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="TodayBtn" Content="今天" Click="TodayBtn_Click" />
                 <DatePicker x:Name="DatePick" DateChanged="DatePick_DateChanged" />
             </StackPanel>
         </Grid>
 
-        <!-- 统计摘要 -->
-        <TextBlock x:Name="SummaryText" Grid.Row="1" Style="{StaticResource PageSubtitle}" Margin="0,0,0,16" />
+        <!-- 统计摘要 + 数据源提示 -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
+            <TextBlock x:Name="SummaryText" Style="{StaticResource PageSubtitle}" />
+            <Border x:Name="DevBadge" CornerRadius="8" Padding="6,1" Visibility="Collapsed"
+                    Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                <TextBlock FontSize="11" Text="dev 数据" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+            </Border>
+        </StackPanel>
 
         <!-- 任务列表 -->
         <ListView x:Name="TaskList" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="False">
@@ -42,13 +54,16 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
+                        <!-- 勾选直接写回共享 JSON（区间任务多天同步） -->
                         <CheckBox
                             Grid.Column="0"
+                            MinWidth="0"
+                            Click="TaskCheck_Click"
                             IsChecked="{x:Bind Done, Mode=OneWay}"
-                            IsEnabled="False"
-                            MinWidth="0" />
+                            Tag="{x:Bind Id}" />
 
                         <Grid Grid.Column="1" ColumnSpacing="10" VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
@@ -61,7 +76,6 @@
                                 TextTrimming="CharacterEllipsis"
                                 VerticalAlignment="Center" />
                             <Border
-                                x:Name="SubtaskBadge"
                                 Grid.Column="1"
                                 CornerRadius="10"
                                 Padding="8,2"
@@ -91,6 +105,26 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Grid>
+
+                        <!-- 行操作菜单 -->
+                        <Button
+                            Grid.Column="2"
+                            Padding="4"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Tag="{x:Bind Id}">
+                            <FontIcon Glyph="&#xE712;" FontSize="14" />
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="删除任务" Click="DeleteItem_Click">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE74D;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
