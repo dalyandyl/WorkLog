@@ -4,45 +4,34 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ctl="using:WorkLog_WinUI.Controls"
+    xmlns:local="using:WorkLog_WinUI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <ScrollViewer>
-        <StackPanel Padding="36,24" Spacing="16" MaxWidth="560" VerticalAlignment="Top">
+        <StackPanel Padding="36,24" Spacing="16" MaxWidth="640" VerticalAlignment="Top">
 
-            <TextBlock Style="{StaticResource PageTitle}" Text="任务发布" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource PageTitle}" Text="任务发布" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="新建待发布" Click="NewPendingBtn_Click" />
+                    <Button x:Name="PublishAllBtn" Style="{StaticResource AccentButtonStyle}" Click="PublishAllBtn_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE724;" FontSize="14" />
+                            <TextBlock Text="发布全部" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
             <TextBlock Style="{StaticResource PageSubtitle}" Text="区间派发：同一任务写入所选每个日期，任一天的勾选/编辑都会同步到所有天" />
 
-            <TextBox x:Name="TitleBox" Header="任务标题" PlaceholderText="必填" />
-
-            <TextBox
-                x:Name="BodyBox"
-                Header="正文（Markdown，可选）"
-                AcceptsReturn="True"
-                MinHeight="70"
-                TextWrapping="Wrap" />
-
-            <StackPanel Spacing="8">
-                <TextBlock Text="派发范围" />
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <CalendarDatePicker x:Name="StartPick" Header="开始日期" PlaceholderText="选择日期" />
-                    <FontIcon Glyph="&#xE76C;" VerticalAlignment="Bottom" Margin="0,0,0,12" />
-                    <CalendarDatePicker x:Name="EndPick" Header="结束日期" PlaceholderText="选择日期" />
-                </StackPanel>
-            </StackPanel>
-
-            <InfoBar x:Name="RangeHint" IsOpen="False" Severity="Informational" />
-
-            <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button x:Name="PublishBtn" Style="{StaticResource AccentButtonStyle}" Click="PublishBtn_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE724;" FontSize="14" />
-                        <TextBlock Text="发布" />
-                    </StackPanel>
-                </Button>
-                <Button Content="预览范围" Click="PreviewBtn_Click" />
-            </StackPanel>
-
+            <!-- 待发布卡片列表 -->
+            <StackPanel x:Name="PendingList" Spacing="12" />
             <InfoBar x:Name="ResultBar" IsOpen="False" />
         </StackPanel>
     </ScrollViewer>

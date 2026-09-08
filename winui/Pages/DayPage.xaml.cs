@@ -29,26 +29,25 @@ public sealed partial class DayPage : Page
     {
         InitializeComponent();
         TaskList.ItemsSource = _rows;
-        DatePick.Date = DateTimeOffset.Now;
+        DatePick.SelectedDate = DateTime.Today.ToString("yyyy-MM-dd");
         Loaded += (_, _) => LoadDay();
     }
 
-    private void DatePick_DateChanged(object? sender, DatePickerValueChangedEventArgs e)
+    private void DatePick_DatePicked(object? sender, string date)
     {
         LoadDay();
     }
 
     private void TodayBtn_Click(object sender, RoutedEventArgs e)
     {
-        DatePick.Date = DateTimeOffset.Now;
+        DatePick.SelectedDate = DateTime.Today.ToString("yyyy-MM-dd");
+        LoadDay();
     }
 
     private void LoadDay()
     {
         _rows.Clear();
-        var d = DatePick.Date;
-
-        _currentDate = d.ToString("yyyy-MM-dd");
+        _currentDate = DatePick.SelectedDate;
         var tasks = App.Data.ReadTasks(_currentDate);
         var tags = App.Data.ReadTags();
         var tagColor = tags.ToDictionary(t => t.Id, t => t.Color);
