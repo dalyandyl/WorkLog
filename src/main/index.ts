@@ -138,12 +138,9 @@ function showWindow(): void {
   }
 }
 
-// 内存优化：禁用 GPU 硬件加速，消除 GPU 进程（实测约 -110MB 常驻内存）。
-// 必须早于 app ready 调用；dev 模式下 app 可能未初始化，加防御性判断。
-if (typeof app !== 'undefined' && typeof app.disableHardwareAcceleration === 'function') {
-  app.disableHardwareAcceleration()
-}
-
+// 注意：勿再调用 app.disableHardwareAcceleration() 做内存优化——
+// 禁用 GPU 后界面退回软件渲染（SwiftShader），弹窗遮罩 blur / 阴影 / 动画全部卡顿。
+// 如需压内存，请从渲染层入手（懒加载已做），不要牺牲硬件加速。
 // 单实例锁：桌面再次双击 exe 或重复运行时，只聚焦已有窗口，不启动第二个进程
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
