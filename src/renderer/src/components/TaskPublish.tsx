@@ -17,6 +17,7 @@ import Modal from './Modal'
 import Drawer from './Drawer'
 import DatePicker from './DatePicker'
 import SubtaskEditor from './SubtaskEditor'
+import DropdownSelect from './DropdownSelect'
 
 interface TaskPublishProps {
   tags: Tag[]
@@ -410,18 +411,12 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
           <div className="publish-history-head">
             <h3>发布历史</h3>
             <div className="publish-filter">
-              <select
-                className="gran-select"
+              <DropdownSelect
                 value={histGran}
-                onChange={(e) => setHistGran(e.target.value as PublishGranularity)}
+                options={GRANULARITY_OPTIONS}
+                onChange={(v) => setHistGran(v as PublishGranularity)}
                 title="筛选粒度"
-              >
-                {GRANULARITY_OPTIONS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
+              />
               <DatePicker value={histDate} onChange={setHistDate} title="筛选时间段" />
               <span className="publish-preview muted">{histRangeLabel(histGran, histDate)}</span>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   BarChart3,
   BookOpenText,
@@ -6,6 +6,7 @@ import {
   CalendarRange,
   ChevronDown,
   FileText,
+  Megaphone,
   Send,
   Settings,
   Tags,
@@ -14,19 +15,22 @@ import {
 } from 'lucide-react'
 import Calendar from './components/Calendar'
 import SearchBox from './components/SearchBox'
-import StatsView from './components/StatsView'
-import TagManager from './components/TagManager'
-import TaskPublish from './components/TaskPublish'
-import TrashView from './components/TrashView'
-import ReportView from './components/ReportView'
+// 内存优化：非默认视图全部懒加载，TipTap / KaTeX 等重库按需进入内存
+const StatsView = lazy(() => import('./components/StatsView'))
+const TagManager = lazy(() => import('./components/TagManager'))
+const TaskPublish = lazy(() => import('./components/TaskPublish'))
+const TrashView = lazy(() => import('./components/TrashView'))
+const ReportView = lazy(() => import('./components/ReportView'))
+const WeeklyView = lazy(() => import('./components/WeeklyView'))
+const SettingsModal = lazy(() => import('./components/SettingsModal'))
+const MeetingList = lazy(() => import('./components/MeetingList'))
+const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'))
 import DayView from './components/DayView'
-import WeeklyView from './components/WeeklyView'
-import SettingsModal from './components/SettingsModal'
-import MeetingList from './components/MeetingList'
+import UpdateBubble, { type UpdateBubbleState } from './components/UpdateBubble'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting'
+type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting' | 'announce'
 
 interface NavItem {
   key: Mode
@@ -43,7 +47,8 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'report', label: '报表', icon: FileText, group: '分析' },
   { key: 'tags', label: '标签', icon: Tags, group: '管理' },
   { key: 'meeting', label: '会议', icon: Users, group: '管理' },
-  { key: 'trash', label: '回收站', icon: Trash2, group: '管理' }
+  { key: 'trash', label: '回收站', icon: Trash2, group: '管理' },
+  { key: 'announce', label: '更新公告', icon: Megaphone, group: '管理' }
 ]
 
 const NAV_GROUPS: { name: '日志' | '任务' | '分析' | '管理' }[] = [
@@ -78,17 +83,69 @@ export default function App() {
   })
   const [tags, setTags] = useState<Tag[]>([])
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set())
-  const [storageRoot, setStorageRoot] = useState('')
   const [status, setStatus] = useState('加载中…')
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [calOpen, setCalOpen] = useState(true)
+  // 右下角更新气泡（启动自动检测到新版本后出现）
+  const [updateBubble, setUpdateBubble] = useState<UpdateBubbleState | null>(null)
+  // 设置弹窗打开期间不弹气泡（设置页内有完整的更新交互），用 ref 供事件回调读取最新值
+  const settingsOpenRef = useRef(settingsOpen)
+  useEffect(() => {
+    settingsOpenRef.current = settingsOpen
+  }, [settingsOpen])
+  // 左侧功能分组的收起状态（localStorage 持久化）
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('wl-nav-collapsed')
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+    } catch {
+      return {}
+    }
+  })
 
   useEffect(() => {
-    window.api.getStorageRoot().then(setStorageRoot)
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
     window.api.listTags().then(setTags)
     window.api.getSettings().then(setSettings)
+    // 每次打开程序自动检测新版本；开发模式下主进程会静默返回（不弹气泡）
+    void window.api.checkUpdate()
+  }, [])
+
+  // 更新事件 -> 气泡状态机：available 弹气泡，progress/downloaded/error 在气泡内流转
+  useEffect(() => {
+    const off = window.api.onUpdateEvent(({ channel, payload }) => {
+      const p = payload as Record<string, unknown>
+      if (channel === 'available') {
+        if (settingsOpenRef.current) return
+        setUpdateBubble({ kind: 'available', version: String(p.version ?? '') })
+      } else if (channel === 'progress') {
+        setUpdateBubble((b) => {
+          if (!b || b.kind === 'error') return b
+          return { kind: 'downloading', version: b.version, percent: Number(p.percent ?? 0) }
+        })
+      } else if (channel === 'downloaded') {
+        setUpdateBubble((b) => {
+          if (!b) return b
+          const v =
+            String(p.version ?? '') ||
+            (b.kind === 'available' || b.kind === 'downloading' ? b.version : '')
+          return { kind: 'downloaded', version: v }
+        })
+      } else if (channel === 'not-available') {
+        setUpdateBubble(null)
+      } else if (channel === 'error') {
+        setUpdateBubble((b) => {
+          if (!b) return b
+          const version =
+            b.kind === 'available' || b.kind === 'downloading' || b.kind === 'downloaded'
+              ? b.version
+              : undefined
+          return { kind: 'error', version, message: String(p.message ?? '未知错误') }
+        })
+      }
+    })
+    return off
   }, [])
 
   useEffect(() => {
@@ -97,6 +154,49 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
     document.documentElement.setAttribute('data-accent', settings.accent)
   }, [settings.theme, settings.accent])
+
+  // 切换视图时自动展开当前视图所在分组，避免收起状态下找不到当前页
+  useEffect(() => {
+    const group = NAV_ITEMS.find((n) => n.key === mode)?.group
+    if (!group) return
+    setCollapsedGroups((prev) => {
+      if (!prev[group]) return prev
+      const next = { ...prev, [group]: false }
+      try {
+        localStorage.setItem('wl-nav-collapsed', JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  function toggleGroup(name: string): void {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [name]: !prev[name] }
+      try {
+        localStorage.setItem('wl-nav-collapsed', JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
+
+  // ---- 更新气泡操作 ----
+  function handleUpdateDownload(): void {
+    void window.api.downloadUpdate()
+  }
+  function handleUpdateInstall(): void {
+    void window.api.installUpdate()
+  }
+  function handleUpdateRetry(): void {
+    if (updateBubble?.kind !== 'error') return
+    const version = updateBubble.version ?? ''
+    setUpdateBubble({ kind: 'available', version })
+    void window.api.downloadUpdate()
+  }
 
   function refreshTaskDates(): void {
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
@@ -152,20 +252,30 @@ export default function App() {
             <h2 className="sidebar-heading">功能</h2>
             {NAV_GROUPS.map((g) => (
               <div className="nav-group" key={g.name}>
-                <div className="nav-group-label">{g.name}</div>
-                {NAV_ITEMS.filter((n) => n.group === g.name).map((n) => {
-                  const Icon = n.icon
-                  return (
-                    <button
-                      key={n.key}
-                      className={mode === n.key ? 'nav-btn active' : 'nav-btn'}
-                      onClick={() => setMode(n.key)}
-                    >
-                      <Icon size={17} strokeWidth={2} />
-                      <span>{n.label}</span>
-                    </button>
-                  )
-                })}
+                <button
+                  type="button"
+                  className="sidebar-section-head nav-group-head"
+                  onClick={() => toggleGroup(g.name)}
+                  aria-expanded={!collapsedGroups[g.name]}
+                  title={collapsedGroups[g.name] ? `展开「${g.name}」` : `收起「${g.name}」`}
+                >
+                  <span>{g.name}</span>
+                  <ChevronDown size={14} className={'chev' + (collapsedGroups[g.name] ? '' : ' flipped')} />
+                </button>
+                {!collapsedGroups[g.name] &&
+                  NAV_ITEMS.filter((n) => n.group === g.name).map((n) => {
+                    const Icon = n.icon
+                    return (
+                      <button
+                        key={n.key}
+                        className={mode === n.key ? 'nav-btn active' : 'nav-btn'}
+                        onClick={() => setMode(n.key)}
+                      >
+                        <Icon size={17} strokeWidth={2} />
+                        <span>{n.label}</span>
+                      </button>
+                    )
+                  })}
               </div>
             ))}
           </nav>
@@ -179,6 +289,7 @@ export default function App() {
         </aside>
 
         <main className="main" key={mode}>
+          <Suspense fallback={<div style={{ padding: 24, color: 'var(--text-secondary)' }}>加载中…</div>}>
           {mode === 'publish' && (
             <TaskPublish
               tags={tags}
@@ -228,19 +339,27 @@ export default function App() {
             <MeetingList tags={tags} onStatus={setStatus} />
           )}
 
-          {/* 底部状态栏 */}
-          <div className="main-footer">
-            <span className="status" title={storageRoot}>{status}</span>
-          </div>
+          {mode === 'announce' && <AnnouncementsView />}
+          </Suspense>
         </main>
       </div>
 
-      <SettingsModal
-        open={settingsOpen}
-        settings={settings}
-        onChange={updateSettings}
-        onClose={() => setSettingsOpen(false)}
-        onStatus={setStatus}
+      <Suspense fallback={null}>
+        <SettingsModal
+          open={settingsOpen}
+          settings={settings}
+          onChange={updateSettings}
+          onClose={() => setSettingsOpen(false)}
+          onStatus={setStatus}
+        />
+      </Suspense>
+
+      <UpdateBubble
+        state={updateBubble}
+        onDownload={handleUpdateDownload}
+        onInstall={handleUpdateInstall}
+        onRetry={handleUpdateRetry}
+        onClose={() => setUpdateBubble(null)}
       />
     </div>
   )

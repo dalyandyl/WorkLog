@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BookOpenText, RefreshCw } from 'lucide-react'
 import type { AccentColor, AppSettings } from '../types'
+import DropdownSelect from './DropdownSelect'
 import Modal from './Modal'
 
 interface SettingsModalProps {
@@ -263,17 +264,17 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
               </div>
               <div className="settings-row">
                 <label className="settings-label">自动同步：</label>
-                <select
-                  className="gran-select"
+                <DropdownSelect
                   value={settings.webdav.autoMode}
-                  onChange={(e) => setWebdav({ autoMode: e.target.value as AppSettings['webdav']['autoMode'] })}
+                  options={[
+                    { value: 'off', label: '关闭' },
+                    { value: 'startup', label: '启动时拉取' },
+                    { value: 'exit', label: '退出时上传' },
+                    { value: 'interval', label: '定时上传' }
+                  ]}
+                  onChange={(v) => setWebdav({ autoMode: v as AppSettings['webdav']['autoMode'] })}
                   title="自动同步时机"
-                >
-                  <option value="off">关闭</option>
-                  <option value="startup">启动时拉取</option>
-                  <option value="exit">退出时上传</option>
-                  <option value="interval">定时上传</option>
-                </select>
+                />
                 {settings.webdav.autoMode === 'interval' && (
                   <>
                     <input
@@ -324,20 +325,20 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
               </div>
               <div className="settings-row">
                 <label className="settings-label">选择镜像源：</label>
-                <select
-                  className="gran-select"
+                <DropdownSelect
                   value={settings.updateSource}
-                  onChange={(e) => {
-                    const v = e.target.value as AppSettings['updateSource']
-                    onChange({ ...settings, updateSource: v })
-                    void window.api.setUpdateSource(v)
+                  options={[
+                    { value: 'auto', label: '自动（Gitee 优先）' },
+                    { value: 'gitee', label: 'Gitee' },
+                    { value: 'github', label: 'GitHub' }
+                  ]}
+                  onChange={(v) => {
+                    const src = v as AppSettings['updateSource']
+                    onChange({ ...settings, updateSource: src })
+                    void window.api.setUpdateSource(src)
                   }}
                   title="选择「检查更新」从哪个平台下载安装包"
-                >
-                  <option value="auto">自动（Gitee 优先）</option>
-                  <option value="gitee">Gitee</option>
-                  <option value="github">GitHub</option>
-                </select>
+                />
               </div>
               <div className="about-update">
                 <div className="about-update-actions">
