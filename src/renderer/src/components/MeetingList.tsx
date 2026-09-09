@@ -14,6 +14,7 @@ import Modal from './Modal'
 import Drawer from './Drawer'
 import MeetingEditor from './MeetingEditor'
 import DatePicker from './DatePicker'
+import DropdownSelect from './DropdownSelect'
 
 interface MeetingListProps {
   tags: Tag[]
@@ -276,31 +277,24 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select
-          className="tag-filter-select"
+        <DropdownSelect
           value={selectedTagId ?? ''}
-          onChange={(e) => setSelectedTagId(e.target.value || null)}
+          options={[{ value: '', label: '全部标签' }, ...tags.map((t) => ({ value: t.id, label: t.name }))]}
+          onChange={(v) => setSelectedTagId(v || null)}
           title="按标签筛选"
-        >
-          <option value="">全部标签</option>
-          {tags.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        />
         <DatePicker value={dateFrom} onChange={setDateFrom} title="开始日期" />
         <span className="date-range-sep">~</span>
         <DatePicker value={dateTo} onChange={setDateTo} title="结束日期" />
-        <select
-          className="tag-filter-select"
+        <DropdownSelect
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as SortMode)}
+          options={[
+            { value: 'time', label: '按会议日期' },
+            { value: 'created', label: '按创建时间' }
+          ]}
+          onChange={(v) => setSortBy(v as SortMode)}
           title="排序方式"
-        >
-          <option value="time">按会议日期</option>
-          <option value="created">按创建时间</option>
-        </select>
+        />
         <div className="meeting-view-toggle">
           <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')} title="卡片视图">
             ▦ 卡片
