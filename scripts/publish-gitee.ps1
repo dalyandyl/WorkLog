@@ -1,4 +1,4 @@
-﻿# =====================================================================
+# =====================================================================
 # 发布新版本到 Gitee（私密仓库）供「日志工具」自动更新使用
 #
 # 流程：
@@ -102,8 +102,10 @@ function Invoke-Gitee([string]$method, [string]$path, [object]$body = $null) {
   $uri = "$apiBase$path"
   $params = @{ Method = $method; Uri = $uri; UseBasicParsing = $true }
   if ($null -ne $body) {
-    $params.Headers = @{ 'Content-Type' = 'application/json' }
-    $params.Body = ($body | ConvertTo-Json -Depth 6)
+    # 必须按 UTF-8 字节发送：PS 5.1 的 Invoke-WebRequest 字符串 Body 会按系统 ANSI(GBK)
+    # 编码，中文发布说明上传后会变成乱码。先序列化 JSON，再编码为 UTF-8 字节数组发送。
+    $params.Headers = @{ 'Content-Type' = 'application/json; charset=utf-8' }
+    $params.Body = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Depth 6))
   } else {
     # 追加 access_token 作为 query（multipart 上传时令牌走表单字段，不走这里）
     $params.Uri = "$uri$('?' + [uri]::EscapeDataString('access_token') + '=' + [uri]::EscapeDataString($token))"
