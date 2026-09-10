@@ -11,6 +11,7 @@ import {
   datesOfTask,
   deleteTask,
   listDatesWithTasks,
+  postponeTask,
   publishTasks,
   readTasks,
   readTasksMany,
@@ -48,9 +49,15 @@ import {
   importAttachmentFile,
   saveAttachmentBuffer
 } from './attachments'
-import type { Meeting } from '../shared/types'
+import type { Meeting, StickyNote } from '../shared/types'
 import { listMeetings, saveMeeting, deleteMeeting } from './meetings'
 import { meetingToMarkdown, meetingExportFileName } from './meetingExport'
+import {
+  addStickyNote,
+  deleteStickyNote,
+  listStickyNotes,
+  updateStickyNote
+} from './stickyNotes'
 
 // 注：commandLine.appendSwitch 已移至 app.whenReady() 内部执行，
 // 因为在 electron-vite dev 模式下模块顶层的 app/protocol 对象尚未初始化。
@@ -228,6 +235,16 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('tasks:reorder', (_event, date: string, orderedIds: string[]) =>
     reorderTasks(storageRoot, date, orderedIds)
+  )
+  // 查询任务当前出现的所有日期（延期弹窗展示原区间、计算默认长度）
+  ipcMain.handle('tasks:datesOf', (_event, taskId: string) =>
+    datesOfTask(storageRoot, taskId)
+  )
+  // 任务延期：在原区间基础上追加自定义新区间（共享 id，全区间同步）
+  ipcMain.handle(
+    'tasks:postpone',
+    (_event, date: string, taskId: string, newDates: string[]) =>
+      postponeTask(storageRoot, date, taskId, newDates)
   )
   ipcMain.handle(
     'tasks:publish',
@@ -422,6 +439,16 @@ app.whenReady().then(async () => {
     }
   )
   ipcMain.handle('meetings:delete', (_event, id: string) => deleteMeeting(storageRoot, id))
+
+  // ---- 便签 ----
+  ipcMain.handle('sticky:list', () => listStickyNotes(storageRoot))
+  ipcMain.handle('sticky:add', (_event, text: string) => addStickyNote(storageRoot, text))
+  ipcMain.handle(
+    'sticky:update',
+    (_event, id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) =>
+      updateStickyNote(storageRoot, id, patch)
+  )
+  ipcMain.handle('sticky:delete', (_event, id: string) => deleteStickyNote(storageRoot, id))
 
   // 单篇导出 Markdown（元信息头 + 正文转换 + 附件清单）
   ipcMain.handle('meetings:export', async (_event, meeting: Meeting) => {

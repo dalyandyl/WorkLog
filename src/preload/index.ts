@@ -7,6 +7,7 @@ import type {
   NewTaskInput,
   PublishRecord,
   SearchHit,
+  StickyNote,
   Tag,
   Task,
   TaskPatch,
@@ -27,6 +28,8 @@ export type WorkLogApi = {
   deleteTask: (date: string, taskId: string) => Promise<{ ok: boolean }>
   trashTask: (date: string, taskId: string) => Promise<{ ok: boolean }>
   reorderTasks: (date: string, orderedIds: string[]) => Promise<void>
+  datesOfTask: (taskId: string) => Promise<string[]>
+  postponeTask: (date: string, taskId: string, newDates: string[]) => Promise<{ ok: boolean; added: number }>
   publishTasks: (dates: string[], input: NewTaskInput) => Promise<{ count: number; instances: { date: string; taskId: string }[] }>
   listTags: () => Promise<Tag[]>
   createTag: (name: string, color: string) => Promise<Tag | null>
@@ -66,6 +69,10 @@ export type WorkLogApi = {
   deleteMeeting: (id: string) => Promise<{ ok: boolean }>
   saveMeetingAttachment: (meetingId: string, name: string, buf: ArrayBuffer) => Promise<string>
   exportMeeting: (meeting: Meeting) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
+  listStickyNotes: () => Promise<StickyNote[]>
+  addStickyNote: (text: string) => Promise<StickyNote>
+  updateStickyNote: (id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) => Promise<StickyNote | null>
+  deleteStickyNote: (id: string) => Promise<{ ok: boolean }>
   getAppInfo: () => Promise<{ appVersion: string; electron: string; chrome: string; node: string; platform: string; arch: string; packaged: boolean }>
   checkUpdate: () => Promise<{ ok: boolean; message?: string }>
   downloadUpdate: () => Promise<{ ok: boolean; message?: string }>
@@ -94,6 +101,14 @@ const api: WorkLogApi = {
     ipcRenderer.invoke('tasks:trash', date, taskId),
   reorderTasks: (date: string, orderedIds: string[]): Promise<void> =>
     ipcRenderer.invoke('tasks:reorder', date, orderedIds),
+  datesOfTask: (taskId: string): Promise<string[]> =>
+    ipcRenderer.invoke('tasks:datesOf', taskId),
+  postponeTask: (
+    date: string,
+    taskId: string,
+    newDates: string[]
+  ): Promise<{ ok: boolean; added: number }> =>
+    ipcRenderer.invoke('tasks:postpone', date, taskId, newDates),
   publishTasks: (
     dates: string[],
     input: NewTaskInput
@@ -198,6 +213,17 @@ const api: WorkLogApi = {
     ipcRenderer.invoke('attach:saveImage', `meetings/${meetingId}`, name, buf),
   exportMeeting: (meeting: Meeting): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('meetings:export', meeting),
+
+  // ---- 便签 ----
+  listStickyNotes: (): Promise<StickyNote[]> => ipcRenderer.invoke('sticky:list'),
+  addStickyNote: (text: string): Promise<StickyNote> =>
+    ipcRenderer.invoke('sticky:add', text),
+  updateStickyNote: (
+    id: string,
+    patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>
+  ): Promise<StickyNote | null> => ipcRenderer.invoke('sticky:update', id, patch),
+  deleteStickyNote: (id: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('sticky:delete', id),
 
   // ---- 系统信息 / 自动更新 ----
   getAppInfo: (): Promise<{

@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2, CheckSquare, Pencil, Square, StickyNote, Trash2 } from 'lucide-react'
+import { CalendarClock, CalendarDays, CheckCircle2, CheckSquare, Pencil, Square, StickyNote, Trash2 } from 'lucide-react'
 import type { Tag, Task } from '../types'
 import RichView from './RichView'
 
@@ -8,16 +8,22 @@ interface TaskDetailProps {
   tags: Tag[]
   onEdit?: () => void
   onDelete?: () => void
+  onPostpone?: () => void
 }
 
 /** 日报任务详情（默认只读）：标题 + 标签 + 子任务 + 正文 + 派发/完成时间 + 备注 */
-export default function TaskDetail({ task, date, tags, onEdit, onDelete }: TaskDetailProps) {
+export default function TaskDetail({ task, date, tags, onEdit, onDelete, onPostpone }: TaskDetailProps) {
   return (
     <div className="task-detail">
       <div className="task-detail-head">
         <h3 className={'task-title-view' + (task.done ? ' done' : '')}>
           {task.title || '（未命名）'}
         </h3>
+        {onPostpone && !task.done && (
+          <button className="icon-btn" onClick={onPostpone} title="延期（追加自定义区间，所有天同步）">
+            <CalendarClock size={15} />
+          </button>
+        )}
         {onEdit && (
           <button className="icon-btn" onClick={onEdit} title="编辑任务（所有天同步）">
             <Pencil size={15} />

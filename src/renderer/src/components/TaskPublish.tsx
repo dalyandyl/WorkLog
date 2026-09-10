@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   CheckSquare,
@@ -18,6 +19,7 @@ import Drawer from './Drawer'
 import DatePicker from './DatePicker'
 import SubtaskEditor from './SubtaskEditor'
 import DropdownSelect from './DropdownSelect'
+import PostponeModal from './PostponeModal'
 
 interface TaskPublishProps {
   tags: Tag[]
@@ -198,6 +200,8 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   const [pubTab, setPubTab] = useState<'history' | 'published'>('published')
   const [published, setPublished] = useState<{ date: string; task: Task }[]>([])
   const [viewEntry, setViewEntry] = useState<{ date: string; task: Task } | null>(null)
+  // 延期弹窗当前条目（null = 关闭）
+  const [postponeEntry, setPostponeEntry] = useState<{ date: string; task: Task } | null>(null)
 
   useEffect(() => {
     window.api.listPublishHistory().then(setHistory)
@@ -392,6 +396,15 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                   })}
                 </div>
                 <div className="publish-record-actions" onClick={(e) => e.stopPropagation()}>
+                  {!entry.task.done && (
+                    <button
+                      className="icon-btn"
+                      onClick={() => setPostponeEntry(entry)}
+                      title="延期（追加自定义区间，所有天同步）"
+                    >
+                      <CalendarClock size={15} />
+                    </button>
+                  )}
                   <input
                     type="checkbox"
                     className="task-check"
@@ -500,6 +513,14 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         {viewEntry && (
           <div className="publish-detail">
             <h3 className="publish-detail-title">{viewEntry.task.title || '未命名任务'}</h3>
+            {!viewEntry.task.done && (
+              <div className="publish-detail-actions">
+                <button className="ghost-btn" onClick={() => setPostponeEntry(viewEntry)}>
+                  <CalendarClock size={14} />
+                  延期（追加区间）
+                </button>
+              </div>
+            )}
             <div className="task-time-info">
               <span>
                 <CalendarDays size={13} />
@@ -612,6 +633,17 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                         </span>
                       )}
                     </div>
+                    {!task.done && (
+                      <div className="publish-record-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="icon-btn"
+                          onClick={() => setPostponeEntry({ date, task })}
+                          title="延期（追加自定义区间，所有天同步）"
+                        >
+                          <CalendarClock size={15} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -650,6 +682,18 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
           </div>
         )}
       </Drawer>
+
+      <PostponeModal
+        open={postponeEntry !== null}
+        task={postponeEntry?.task ?? null}
+        entryDate={postponeEntry?.date ?? ''}
+        onClose={() => setPostponeEntry(null)}
+        onPostponed={() => {
+          refreshPublished()
+          onPublished()
+        }}
+        onStatus={onStatus}
+      />
     </div>
   )
 }

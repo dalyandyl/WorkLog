@@ -2558,7 +2558,8 @@ body {
 /* ===================== v3.1：发布页 ===================== */
 .publish-record-actions {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   flex: none;
 }
 
@@ -5285,5 +5286,568 @@ input[type='radio']:focus-visible {
   font-size: 11px;
   color: var(--muted);
   opacity: 0.75;
+}
+
+/* ==================== 便签功能 ==================== */
+
+/* ---- 便签管理页 ---- */
+/* 与统计/日报一致：通栏铺满主区，内部滚动 */
+.sticky-view {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 24px;
+}
+
+/* 顶部工具条：卡片化 */
+.sticky-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.sticky-toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.sticky-toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: none;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+.sticky-toolbar-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.sticky-toolbar-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.sticky-toolbar-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 360px;
+  min-width: 280px;
+}
+
+.sticky-add-input {
+  flex: 1;
+}
+
+/* 概览统计卡（仿统计页 stat-cards）：铺满一行 */
+.sticky-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.sticky-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.sticky-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: none;
+}
+
+.sticky-stat-icon.blue {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sticky-stat-icon.amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.sticky-stat-icon.gray {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--muted);
+}
+
+.sticky-stat-icon.green {
+  background: rgba(22, 163, 74, 0.14);
+  color: #16a34a;
+}
+
+[data-theme='dark'] .sticky-stat-icon.amber {
+  color: #fbbf24;
+}
+
+[data-theme='dark'] .sticky-stat-icon.green {
+  color: #4ade80;
+}
+
+.sticky-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.sticky-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* 分区：板块容器（通栏） */
+.sticky-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sticky-section {
+  padding: 16px 18px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.sticky-section-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sticky-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex: none;
+}
+
+.sticky-section-icon.amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.sticky-section-icon.gray {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--muted);
+}
+
+.sticky-section-icon.green {
+  background: rgba(22, 163, 74, 0.14);
+  color: #16a34a;
+}
+
+[data-theme='dark'] .sticky-section-icon.amber {
+  color: #fbbf24;
+}
+
+[data-theme='dark'] .sticky-section-icon.green {
+  color: #4ade80;
+}
+
+.sticky-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex: none;
+}
+
+.sticky-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sticky-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* 便签卡片：便签纸风格（柔和渐变 + 折角） */
+.sticky-card {
+  position: relative;
+  background: linear-gradient(160deg, #fffef5 0%, #fff8dc 100%);
+  border: 1px solid #f0e08a;
+  border-radius: 10px;
+  padding: 16px 18px 12px;
+  box-shadow: var(--shadow-card);
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.sticky-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 14px 14px 0;
+  border-color: transparent #f4e48f transparent transparent;
+  border-radius: 0 10px 0 0;
+}
+
+.sticky-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.sticky-card.pinned {
+  border-color: #e9c94f;
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 8px 22px rgba(245, 158, 11, 0.16);
+}
+
+/* 置顶徽标：图钉贴纸 */
+.sticky-pin-badge {
+  position: absolute;
+  top: -9px;
+  left: -6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 3px 8px rgba(217, 119, 6, 0.4);
+  transform: rotate(-4deg);
+}
+
+/* 完成：虚线卡 + 对勾水印 */
+.sticky-card.done {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  opacity: 0.68;
+}
+
+.sticky-card.done::after {
+  display: none;
+}
+
+.sticky-card.done::before {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  font-weight: 700;
+  color: #16a34a;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+[data-theme='dark'] .sticky-card.done::before {
+  color: #4ade80;
+}
+
+.sticky-card-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sticky-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.sticky-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--accent-ring);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+}
+
+.sticky-edit-input:focus {
+  border-color: var(--accent);
+}
+
+.sticky-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.sticky-card-actions .icon-btn {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+}
+
+.sticky-card-actions .icon-btn.active {
+  filter: none;
+  opacity: 1;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sticky-card-actions .icon-btn .recheck {
+  color: #16a34a;
+}
+
+.sticky-card-time {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+/* 空状态 */
+.sticky-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 52px 20px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+}
+
+.sticky-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.sticky-empty p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sticky-empty span:last-child {
+  font-size: 12.5px;
+}
+
+/* 深色模式便签卡片 */
+[data-theme='dark'] .sticky-card {
+  background: linear-gradient(160deg, #332c17 0%, #2b2411 100%);
+  border-color: #4a4123;
+}
+
+[data-theme='dark'] .sticky-card::after {
+  border-color: transparent #453d1f transparent transparent;
+}
+
+[data-theme='dark'] .sticky-card.pinned {
+  border-color: #8a7a2e;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 8px 22px rgba(217, 119, 6, 0.18);
+}
+
+/* ---- 日报便签区（任务列表上方） ---- */
+.sticky-day-area {
+  margin-bottom: 14px;
+  padding: 10px 12px 12px;
+  border: 1px dashed #e4cf6a;
+  border-radius: var(--radius);
+  background: #fffbe6;
+}
+
+[data-theme='dark'] .sticky-day-area {
+  background: #2e2813;
+  border-color: #5a4f26;
+}
+
+.sticky-day-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a7a2e;
+}
+
+[data-theme='dark'] .sticky-day-head {
+  color: #d9c76a;
+}
+
+.sticky-day-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.sticky-day-item:hover {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.sticky-day-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* ==================== 任务延期弹窗 ==================== */
+.postpone-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.postpone-task-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.postpone-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.postpone-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.postpone-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.postpone-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.publish-detail-actions {
+  margin-top: 10px;
+}
+
+/* 延期成功弹窗 */
+.postpone-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.postpone-result-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.14);
+  color: #16a34a;
+}
+
+[data-theme='dark'] .postpone-result-icon {
+  color: #4ade80;
+}
+
+.postpone-result-msg {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
