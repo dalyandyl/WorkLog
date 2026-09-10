@@ -13,6 +13,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.5.2',
+    date: '2026-09-10',
+    content: `- 恢复 GPU 硬件加速，修复按钮悬停、弹窗打开卡顿`
+  },
+  {
     version: '1.5.1',
     date: '2026-09-09',
     content: `- 新增「更新公告」页，展示每个版本发布的新内容
