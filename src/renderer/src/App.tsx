@@ -9,6 +9,7 @@ import {
   Megaphone,
   Send,
   Settings,
+  StickyNote,
   Tags,
   Trash2,
   Users
@@ -25,12 +26,13 @@ const WeeklyView = lazy(() => import('./components/WeeklyView'))
 const SettingsModal = lazy(() => import('./components/SettingsModal'))
 const MeetingList = lazy(() => import('./components/MeetingList'))
 const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'))
+const StickyNotesView = lazy(() => import('./components/StickyNotesView'))
 import DayView from './components/DayView'
 import UpdateBubble, { type UpdateBubbleState } from './components/UpdateBubble'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting' | 'announce'
+type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting' | 'announce' | 'sticky'
 
 interface NavItem {
   key: Mode
@@ -46,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'stats', label: '统计', icon: BarChart3, group: '分析' },
   { key: 'report', label: '报表', icon: FileText, group: '分析' },
   { key: 'tags', label: '标签', icon: Tags, group: '管理' },
+  { key: 'sticky', label: '便签', icon: StickyNote, group: '管理' },
   { key: 'meeting', label: '会议', icon: Users, group: '管理' },
   { key: 'trash', label: '回收站', icon: Trash2, group: '管理' },
   { key: 'announce', label: '更新公告', icon: Megaphone, group: '管理' }
@@ -337,6 +340,10 @@ export default function App() {
 
           {mode === 'meeting' && (
             <MeetingList tags={tags} onStatus={setStatus} />
+          )}
+
+          {mode === 'sticky' && (
+            <StickyNotesView onStatus={setStatus} />
           )}
 
           {mode === 'announce' && <AnnouncementsView />}

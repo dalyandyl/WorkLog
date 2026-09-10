@@ -6,6 +6,7 @@ import type {
   NewTaskInput,
   PublishRecord,
   SearchHit,
+  StickyNote,
   Tag,
   Task,
   TaskPatch,
@@ -27,6 +28,12 @@ export interface WorkLogApi {
   deleteTask(date: string, taskId: string): Promise<{ ok: boolean }>
   trashTask(date: string, taskId: string): Promise<{ ok: boolean }>
   reorderTasks(date: string, orderedIds: string[]): Promise<void>
+  datesOfTask(taskId: string): Promise<string[]>
+  postponeTask(
+    date: string,
+    taskId: string,
+    newDates: string[]
+  ): Promise<{ ok: boolean; added: number }>
   publishTasks(
     dates: string[],
     input: NewTaskInput
@@ -103,6 +110,15 @@ export interface WorkLogApi {
   exportMeeting(
     meeting: Meeting
   ): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
+
+  // 便签
+  listStickyNotes(): Promise<StickyNote[]>
+  addStickyNote(text: string): Promise<StickyNote>
+  updateStickyNote(
+    id: string,
+    patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>
+  ): Promise<StickyNote | null>
+  deleteStickyNote(id: string): Promise<{ ok: boolean }>
 
   // 系统信息 / 更新
   getAppInfo(): Promise<{

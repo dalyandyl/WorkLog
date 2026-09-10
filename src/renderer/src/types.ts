@@ -9,6 +9,7 @@ export type {
   PublishRecord,
   ReminderSetting,
   SearchHit,
+  StickyNote,
   Subtask,
   Tag,
   TagCount,

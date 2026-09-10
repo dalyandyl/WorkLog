@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, CheckCircle2, Save, StickyNote, X } from 'lucide-react'
-import type { Subtask, Tag, Task } from '../types'
+import { CalendarDays, CheckCircle2, PinOff, Save, StickyNote as StickyNoteIcon, X } from 'lucide-react'
+import type { StickyNote, Subtask, Tag, Task } from '../types'
 import { toDateStr, weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
 import DatePicker from './DatePicker'
 import TagPicker from './TagPicker'
 import MarkdownEditor from './MarkdownEditor'
 import SubtaskEditor from './SubtaskEditor'
+import PostponeModal from './PostponeModal'
 
 interface DayViewProps {
   date: string
@@ -31,6 +32,10 @@ export default function DayView({
 }: DayViewProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRest, setIsRest] = useState(false)
+  // 置顶且未完成的便签（显示在任务列表上方）
+  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([])
+  // 延期弹窗当前任务（null = 关闭）
+  const [postponeTask, setPostponeTask] = useState<Task | null>(null)
 
   // 编辑模式（行内，非弹窗）
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -64,11 +69,30 @@ export default function DayView({
     window.api.isRest(date).then((r) => {
       if (!cancelled) setIsRest(r)
     })
+    // 便签与日期无关，每次进入日报重新拉取，保证与便签页状态同步
+    window.api.listStickyNotes().then((all) => {
+      if (cancelled) return
+      setStickyNotes(all.filter((n) => n.pinned && !n.completed))
+    })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date])
+
+  /** 日报便签区：标记完成（从日报消失） */
+  async function completeSticky(n: StickyNote): Promise<void> {
+    setStickyNotes((prev) => prev.filter((x) => x.id !== n.id))
+    await window.api.updateStickyNote(n.id, { completed: true })
+    onStatus('已标记完成，便签移出日报')
+  }
+
+  /** 日报便签区：取消置顶（从日报消失） */
+  async function unpinSticky(n: StickyNote): Promise<void> {
+    setStickyNotes((prev) => prev.filter((x) => x.id !== n.id))
+    await window.api.updateStickyNote(n.id, { pinned: false })
+    onStatus('已取消置顶，便签移出日报')
+  }
 
   const selected = tasks.find((t) => t.id === selectedTaskId) ?? null
 
@@ -176,6 +200,35 @@ export default function DayView({
         </div>
         <div className="day-columns">
           <div className="day-list">
+            {stickyNotes.length > 0 && (
+              <div className="sticky-day-area">
+                <div className="sticky-day-head">
+                  <StickyNoteIcon size={14} />
+                  <span>便签提醒</span>
+                </div>
+                {stickyNotes.map((n) => (
+                  <div key={n.id} className="sticky-day-item">
+                    <input
+                      type="checkbox"
+                      className="task-check"
+                      checked={false}
+                      title="标记完成"
+                      onChange={() => completeSticky(n)}
+                    />
+                    <span className="sticky-day-text" title={n.text}>
+                      {n.text}
+                    </span>
+                    <button
+                      className="icon-btn"
+                      title="取消置顶（移出日报）"
+                      onClick={() => unpinSticky(n)}
+                    >
+                      <PinOff size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {tasks.length === 0 ? (
               <div className="task-empty">当天暂无任务，请在「任务发布」中发布</div>
             ) : (
@@ -273,7 +326,7 @@ export default function DayView({
                   </div>
                   <div className="task-note">
                     <div className="task-note-label">
-                      <StickyNote size={13} />
+                      <StickyNoteIcon size={13} />
                       备注
                     </div>
                     <textarea
@@ -299,6 +352,7 @@ export default function DayView({
                   tags={tags}
                   onEdit={() => openEdit(selected)}
                   onDelete={() => delTask(selected)}
+                  onPostpone={() => setPostponeTask(selected)}
                 />
               )
             ) : (
@@ -307,6 +361,18 @@ export default function DayView({
           </div>
         </div>
       </div>
+
+      <PostponeModal
+        open={postponeTask !== null}
+        task={postponeTask}
+        entryDate={date}
+        onClose={() => setPostponeTask(null)}
+        onPostponed={() => {
+          void loadTasks()
+          onTasksChanged()
+        }}
+        onStatus={onStatus}
+      />
     </div>
   )
 }

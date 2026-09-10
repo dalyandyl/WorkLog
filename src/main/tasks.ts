@@ -250,6 +250,35 @@ export async function restoreTasksToDays(
   }
 }
 
+/**
+ * 任务延期：在原发布区间基础上「追加」自定义新区间。
+ * 新区间每个日期写入同一条任务 id（已含该 id 的日期自动跳过），
+ * 任一天勾选完成 / 编辑 / 备注继续按 id 全局同步（复用 updateTask 机制）。
+ * 仅未完成任务可延期。
+ */
+export async function postponeTask(
+  root: string,
+  date: string,
+  taskId: string,
+  newDates: string[]
+): Promise<{ ok: boolean; added: number }> {
+  const tasks = await readTasks(root, date)
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task) return { ok: false, added: 0 }
+  if (task.done) return { ok: false, added: 0 }
+
+  const existing = new Set(await datesOfTask(root, taskId))
+  let added = 0
+  for (const d of newDates) {
+    if (existing.has(d)) continue // 与已有日期重叠的部分自动跳过
+    const dayTasks = await readTasks(root, d)
+    const maxOrder = dayTasks.reduce((m, t) => Math.max(m, t.order), -1)
+    await writeTasks(root, d, [...dayTasks, { ...task, order: maxOrder + 1 }])
+    added++
+  }
+  return { ok: true, added }
+}
+
 /** 从所有任务（含子任务）中移除某标签引用（标签删除时联动） */
 export async function removeTagFromAllTasks(root: string, tagId: string): Promise<void> {
   const dates = await listDatesWithTasks(root)

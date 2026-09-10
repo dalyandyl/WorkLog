@@ -188,3 +188,15 @@ export interface Meeting {
   createdAt: string       // 创建时间 ISO
   updatedAt: string       // 最后修改时间 ISO
 }
+
+// ==================== 便签功能类型定义 ====================
+
+/** 便签（置顶便签显示在日报任务列表上方；置顶 = 是否出现在日报的条件） */
+export interface StickyNote {
+  id: string              // UUID
+  text: string            // 简短文本
+  pinned: boolean         // 置顶 = 是否出现在日报
+  completed: boolean      // 是否已完成（完成则从日报消失）
+  createdAt: string       // 创建时间 ISO
+  completedAt: string | null // 完成时间 ISO（未完成 null）
+}
