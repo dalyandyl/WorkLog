@@ -39,6 +39,9 @@
   --danger: #ef4444;
   /* 成功反馈色（Toast 用），深色模式下提亮 */
   --success: #10b981;
+  /* 文本高亮（TipTap 的 Highlight → <mark>）。不设它的话浏览器默认是纯 #ffff00，
+     在纸张化界面里非常刺眼；这里用低饱和琥珀，深浅色都可读。 */
+  --highlight: color-mix(in srgb, #f59e0b 32%, transparent);
   --radius: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
@@ -2652,7 +2655,30 @@ body {
   background: var(--accent-soft);
 }
 
-/* ===================== 编辑器：光标行高亮兜底（CaretLineHighlight） ===================== */
+/* ===================== 编辑器：焦点环与「黄框」 =====================
+ *
+ * 历史坑（**不要再按老办法"修"**）：这里曾有一段
+ *   `.rich-content, .rich-editor-content, input, textarea { caret-line-highlight: none }`
+ * 声称是「关闭 Chromium 光标行高亮（黄框）」。
+ * 已用 Electron 探针实测：**`CSS.supports('caret-line-highlight','none') === false`** ——
+ * 它根本不是有效的 CSS 属性，浏览器解析时直接丢弃该声明（所以按 cssText 遍历都扫不到它）。
+ * 也就是说那段 CSS 从来没有任何作用。主进程里的
+ * `--disable-features=CaretLineHighlight` / `disableBlinkFeatures: 'CaretLineHighlight'`
+ * 也未在 Chromium 中找到对应的特性名，同样可疑。
+ *
+ * 真正需要补的是**编辑面（contenteditable）的默认焦点环**：
+ * 原先所有 `outline: none` 都只写在只读视图 `.rich-content` 上，
+ * 而编辑态真正可聚焦的元素是 `.rich-editor-content > .ProseMirror`（TipTap 建在里面的子节点），
+ * 它没有对应规则，因此在键盘聚焦时会走 Chromium 的默认焦点环。
+ * 下面显式关掉它，并把「聚焦」改由外层容器的边框来表达（更克制、也更符合纸张观感）。
+ */
+.rich-editor-content .ProseMirror,
+.rich-editor-content .ProseMirror:focus,
+.rich-editor-content .ProseMirror:focus-visible,
+.rich-editor-content:focus,
+.rich-editor-content:focus-visible,
+.rich-editor-content:focus-within,
+/* 只读视图与公式挂件（原有规则，保留以免回归） */
 .rich-content .ProseMirror:focus,
 .rich-content:focus,
 .rt-content-wrap:focus,
@@ -2660,21 +2686,28 @@ body {
   outline: none;
 }
 
-/* v3.3：彻底关闭 Chromium 的光标行高亮（黄框），Chrome 134+ 支持 */
-.rich-content,
-.rich-content .ProseMirror,
-.task-title-input,
-.tag-create-name,
-.rt-math-input,
-.search-input,
-textarea,
-input {
-  caret-line-highlight: none;
+/* 聚焦提示交给容器，避免出现系统默认焦点环那种突兀描边 */
+.editor-wrapper {
+  transition: border-color 0.15s ease;
 }
 
-/* 选区统一为蓝色，覆盖任何黄色选区 */
+.editor-wrapper:focus-within {
+  border-color: var(--accent-ring);
+}
+
+/* 选区统一为强调色，覆盖任何系统默认（可能偏黄）的选区底色 */
 ::selection {
   background: var(--accent-ring);
+}
+
+/* 文本高亮：覆盖浏览器默认的纯黄底 */
+.rich-content mark,
+.rich-editor-content mark,
+.rich-view mark {
+  background: var(--highlight);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
 }
 
 .wl-modal .publish-body {
