@@ -2,6 +2,9 @@ import type {
   AppSettings,
   DataWarning,
   ExportOptions,
+  JournalDay,
+  JournalEntry,
+  JournalEntryInput,
   Meeting,
   MonthStats,
   NewTaskInput,
@@ -119,6 +122,19 @@ export interface WorkLogApi {
   ): Promise<StickyNote | null>
   deleteStickyNote(id: string): Promise<{ ok: boolean }>
 
+  // ---- 日志 ----
+  listJournalDates(): Promise<string[]>
+  readJournalDay(date: string): Promise<JournalDay>
+  listJournalRange(opts: { before?: string; limit?: number }): Promise<JournalDay[]>
+  saveJournalEntry(
+    date: string,
+    entry: JournalEntryInput
+  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
+  deleteJournalEntry(
+    date: string,
+    id: string
+  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
+
   // 系统信息 / 更新
   getAppInfo(): Promise<{
     appVersion: string
@@ -133,7 +149,7 @@ export interface WorkLogApi {
   downloadUpdate(): Promise<{ ok: boolean; message?: string }>
   /** 取消进行中的更新下载（网络卡死时不用再杀进程） */
   cancelUpdate(): Promise<{ ok: boolean }>
-  installUpdate(): Promise<{ ok: boolean }>
+  installUpdate(): Promise<{ ok: boolean; message?: string }>
   setUpdateSource(source: UpdateSource): Promise<{ ok: boolean }>
   onUpdateEvent(cb: (data: { channel: string; payload: Record<string, unknown> }) => void): () => void
   /** 数据层告警（文件损坏被隔离 / 写盘失败 / 回收站超限），返回取消订阅 */

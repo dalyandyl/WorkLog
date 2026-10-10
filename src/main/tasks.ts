@@ -218,6 +218,10 @@ export async function listDatesWithTasks(root: string): Promise<string[]> {
     const years = await fs.readdir(root, { withFileTypes: true })
     for (const y of years) {
       if (!y.isDirectory()) continue
+      // 只认 4 位年份目录。根目录下还有 journal / meetings / weekly / attachments 等
+      // 非年份目录；不加这个约束时，`journal/<年>/<日期>.json` 这类三层布局
+      // 一旦将来多一层或少一层，就会被误判成任务天文件而污染日历打点。
+      if (!/^\d{4}$/.test(y.name)) continue
       const files = await fs.readdir(path.join(root, y.name))
       for (const f of files) {
         const m = /^(\d{4}-\d{2}-\d{2})\.json$/.exec(f)

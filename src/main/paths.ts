@@ -60,6 +60,27 @@ export function meetingsDir(root: string): string {
   return path.join(root, 'meetings')
 }
 
+/**
+ * 日志根目录：`<root>/journal/<年>/<日期>.json`
+ *
+ * 注意这里的层级：`journal` 下的第一层是**年份目录**，第二层才是天文件。
+ * 这样安排是为了与任务天文件（`<root>/<年>/<日期>.json`）保持同构，
+ * 同时**不会**被 `tasks.listDatesWithTasks` 误判为任务天文件
+ * （它只匹配 `<年>/YYYY-MM-DD.json` 这一层的文件名，而 `journal/` 下第一层是 `2026` 这样的目录名）。
+ * 但那是巧合而非保证 —— 该函数已同时加上「目录名必须是 4 位年份」的显式约束。
+ */
+export function journalRoot(root: string): string {
+  return path.join(root, 'journal')
+}
+
+export function journalYearDir(root: string, year: string): string {
+  return path.join(journalRoot(root), year)
+}
+
+export function journalDayPath(root: string, date: string): string {
+  return path.join(journalYearDir(root, date.slice(0, 4)), `${date}.json`)
+}
+
 export function meetingFileName(meetingId: string): string {
   return `${meetingId}.md.json`
 }

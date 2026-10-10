@@ -201,6 +201,58 @@ export interface StickyNote {
   completedAt: string | null // 完成时间 ISO（未完成 null）
 }
 
+// ==================== 日志功能类型定义 ====================
+//
+// 「日志」是**独立于任务**的时间线式个人手记：一天可以写多条，每条带时间。
+// 与任务的关系是**可选挂载**（可在日志里挂上当天做过的任务，也可以不挂）。
+
+/**
+ * 日志条目里「挂载的任务」——**快照式引用**。
+ *
+ * 语义（用户明确要求）：挂载时把任务标题抄下来，**之后任务改名或删除都不影响日志内容**；
+ * 同时保留 `taskId` + `date`，仅用于「点击跳转」与「原任务已失效」的检测。
+ *
+ * 刻意**只存标题与完成状态**，不抄正文 —— 保持日志清爽，需要细节时点链接跳过去。
+ */
+export interface MountedTask {
+  taskId: string          // 被挂载任务的 id
+  date: string            // 该任务所在天 YYYY-MM-DD（跳转定位用）
+  title: string           // 挂载当时的标题快照（不随任务改名而变）
+  done: boolean           // 挂载当时的完成状态快照
+}
+
+/** 一条日志（同一天可有多条，按 `time` 排序） */
+export interface JournalEntry {
+  id: string              // UUID
+  time: string            // HH:mm —— 一天内的展示与排序依据，可编辑
+  createdAt: string       // 创建时间 ISO
+  updatedAt: string       // 最后修改时间 ISO
+  body: string            // 富文本 HTML（TipTap 产出；**渲染前必须经 sanitizeHtml**）
+  attachments: AttachmentMeta[]  // 非图片附件（图片是内联在 body 里的 <img>）
+  mountedTasks: MountedTask[]    // 可选挂载的当天任务快照
+}
+
+/** 某一天的日志文件内容 —— `logs/journal/<年>/<日期>.json` */
+export interface JournalDay {
+  date: string            // YYYY-MM-DD
+  entries: JournalEntry[]
+}
+
+/**
+ * 新建 / 更新日志条目的输入。
+ *
+ * 除 `id` 外全部可选：新建时由主进程补 `id`、`time`（缺省取当前时刻）、`createdAt`、`updatedAt`；
+ * 更新已有条目时只传要改的字段，未传字段保持原值。
+ */
+export interface JournalEntryInput {
+  id?: string
+  time?: string
+  body?: string
+  attachments?: AttachmentMeta[]
+  mountedTasks?: MountedTask[]
+  createdAt?: string
+}
+
 // ==================== 数据层告警类型定义 ====================
 
 export type DataWarningKind = 'corrupt' | 'write-failed'

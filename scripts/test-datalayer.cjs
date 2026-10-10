@@ -81,6 +81,16 @@ require(path.join(root, 'node_modules', 'esbuild')).buildSync({
   outfile: urlOutFile
 })
 
+// 日志数据层（journal.ts -> jsonStore.ts + paths.ts）：全链路无 electron 依赖
+const journalOutFile = path.join(os.tmpdir(), 'wl-journal-test.cjs')
+require(path.join(root, 'node_modules', 'esbuild')).buildSync({
+  entryPoints: [path.join(root, 'src', 'main', 'journal.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outfile: journalOutFile
+})
+
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-data-'))
 let pass = 0
 let fail = 0
@@ -431,9 +441,160 @@ async function main() {
   )
   check('恶意 folder 的 URL 不含 ..', !evil.url.includes('..'), evil.url)
 
+  // ---------- 12. 日志数据层 ----------
+  console.log('\n[12] 日志数据层')
+  const journal = require(journalOutFile)
+
+  // 12.1 新建条目 → 落盘到 journal/<年>/<日期>.json
+  const j1 = await journal.saveJournalEntry(tmpRoot, '2026-10-10', {
+    time: '09:00',
+    body: '<p>早上</p>'
+  })
+  check('新建条目返回规范化条目', j1.id.length > 0 && j1.time === '09:00' && j1.body === '<p>早上</p>')
+  const jFile = path.join(tmpRoot, 'journal', '2026', '2026-10-10.json')
+  check('日志天文件落在 journal/<年>/<日期>.json', fs.existsSync(jFile))
+
+  // 12.2 读回
+  const jDay = await journal.readJournalDay(tmpRoot, '2026-10-10')
+  check('读回条目数与日期正确', jDay.entries.length === 1 && jDay.date === '2026-10-10')
+  check('createdAt / updatedAt 已填充', !!jDay.entries[0].createdAt && !!jDay.entries[0].updatedAt)
+  check('不存在的日期返回空数组而非报错', (await journal.readJournalDay(tmpRoot, '2020-01-01')).entries.length === 0)
+
+  // 12.3 一天多条按 time 升序
+  await journal.saveJournalEntry(tmpRoot, '2026-10-10', { time: '18:30', body: '<p>傍晚</p>' })
+  await journal.saveJournalEntry(tmpRoot, '2026-10-10', { time: '12:00', body: '<p>中午</p>' })
+  const jSorted = await journal.readJournalEntries(tmpRoot, '2026-10-10')
+  check(
+    '一天多条按 time 升序',
+    jSorted.map((e) => e.time).join(',') === '09:00,12:00,18:30',
+    jSorted.map((e) => e.time).join(',')
+  )
+
+  // 12.4 更新同一条（同 id）不产生重复，保留 createdAt 与未传字段
+  const jBefore = jSorted.find((e) => e.id === j1.id)
+  const jUpd = await journal.saveJournalEntry(tmpRoot, '2026-10-10', {
+    id: j1.id,
+    body: '<p>早上（改）</p>'
+  })
+  const jAfter = await journal.readJournalEntries(tmpRoot, '2026-10-10')
+  check('更新同 id 不新增条目', jAfter.length === 3, String(jAfter.length))
+  check('更新保留 createdAt', jUpd.createdAt === jBefore.createdAt)
+  check('更新保留未传的 time', jUpd.time === '09:00')
+  check('更新写入新 body', jUpd.body === '<p>早上（改）</p>')
+
+  // 12.5 挂载任务快照（只存标题 + 完成状态；非法项过滤）
+  const jMount = await journal.saveJournalEntry(tmpRoot, '2026-10-10', {
+    id: j1.id,
+    mountedTasks: [{ taskId: 't1', date: '2026-10-10', title: '写周报', done: false }]
+  })
+  check(
+    '挂载任务被保存为快照',
+    jMount.mountedTasks.length === 1 && jMount.mountedTasks[0].title === '写周报'
+  )
+  const jBadMount = await journal.saveJournalEntry(tmpRoot, '2026-10-10', {
+    id: j1.id,
+    mountedTasks: [{ title: '没有 taskId' }, null]
+  })
+  check('挂载列表中的非法项被过滤', jBadMount.mountedTasks.length === 0)
+
+  // 12.6 删除条目；条目清空后天文件应被删除而不是留空壳
+  const jRemoved = await journal.deleteJournalEntry(tmpRoot, '2026-10-10', j1.id)
+  check('删除返回被删条目（供回收站快照）', !!jRemoved && jRemoved.id === j1.id)
+  check(
+    '删除不存在的条目返回 null（幂等）',
+    (await journal.deleteJournalEntry(tmpRoot, '2026-10-10', 'no-such-id')) === null
+  )
+  const jRest = await journal.readJournalEntries(tmpRoot, '2026-10-10')
+  check('删除后剩余 2 条', jRest.length === 2, String(jRest.length))
+  for (const e of jRest) await journal.deleteJournalEntry(tmpRoot, '2026-10-10', e.id)
+  check('条目清空后天文件被删除（不留空壳）', !fs.existsSync(jFile))
+
+  // 12.7 日期校验 —— 阻断路径穿越（date 来自渲染层且会参与拼接路径）
+  let rejected = 0
+  for (const bad of ['../../evil', '2026-1-1', '', '2026-10-10/../..', 'x', '2026-10-10.json']) {
+    try {
+      await journal.readJournalEntries(tmpRoot, bad)
+    } catch {
+      rejected++
+    }
+  }
+  check('非法日期全部被拒绝（含路径穿越）', rejected === 6, String(rejected))
+  check(
+    'isValidJournalDate 判定正确',
+    journal.isValidJournalDate('2026-10-10') && !journal.isValidJournalDate('../../x')
+  )
+
+  // 12.8 损坏文件隔离（与任务天文件同一套 jsonStore 语义）
+  await journal.saveJournalEntry(tmpRoot, '2026-10-11', { time: '10:00', body: '<p>x</p>' })
+  const jBad = path.join(tmpRoot, 'journal', '2026', '2026-10-11.json')
+  fs.writeFileSync(jBad, '{ 被截断了', 'utf-8')
+  check('损坏日志文件按空数据继续', (await journal.readJournalEntries(tmpRoot, '2026-10-11')).length === 0)
+  check(
+    '损坏日志文件被隔离为 .corrupt-*',
+    fs.readdirSync(path.dirname(jBad)).some((f) => f.includes('.corrupt-'))
+  )
+
+  // 12.9 listJournalDates 只认 4 位年份目录
+  fs.mkdirSync(path.join(tmpRoot, 'journal', 'not-a-year'), { recursive: true })
+  fs.writeFileSync(path.join(tmpRoot, 'journal', 'not-a-year', '2026-01-01.json'), '{}', 'utf-8')
+  const jDates = await journal.listJournalDates(tmpRoot)
+  check(
+    'listJournalDates 只认 4 位年份目录',
+    jDates.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) && !jDates.includes('2026-01-01'),
+    jDates.join(',')
+  )
+
+  // 12.10 时间线：倒序 + limit + before
+  for (const d of ['2026-10-12', '2026-10-13', '2026-10-14']) {
+    await journal.saveJournalEntry(tmpRoot, d, { time: '08:00', body: `<p>${d}</p>` })
+  }
+  const jRange = await journal.listJournalRange(tmpRoot, { limit: 2 })
+  check(
+    'listJournalRange 按日期倒序返回',
+    jRange.length === 2 && jRange[0].date === '2026-10-14' && jRange[1].date === '2026-10-13',
+    jRange.map((r) => r.date).join(',')
+  )
+  const jRangeBefore = await journal.listJournalRange(tmpRoot, { before: '2026-10-13', limit: 5 })
+  check(
+    'listJournalRange 的 before 生效',
+    jRangeBefore.length > 0 && jRangeBefore.every((r) => r.date < '2026-10-13'),
+    jRangeBefore.map((r) => r.date).join(',')
+  )
+
+  // 12.11 【兼容性硬约束】日志数据不得被任务侧扫描误判
+  //  1.5.4 的列表接口会把根目录下每个子目录都当成"年份"再匹配天文件名；
+  //  必须确认 journal/<年>/<日期>.json 这种三层布局不会被误认为任务天文件。
+  await tasksMod.publishTasks(tmpRoot, ['2026-10-20'], { title: '真实任务' })
+  const scanDates = await tasksMod.listDatesWithTasks(tmpRoot)
+  check('任务日期扫描仍能找到真实任务', scanDates.includes('2026-10-20'), scanDates.join(','))
+  check(
+    '【兼容】日志日期不会污染任务日期扫描',
+    !scanDates.some((d) => ['2026-10-12', '2026-10-13', '2026-10-14'].includes(d)),
+    scanDates.join(',')
+  )
+
+  // 12.12 并发写同一份日志不丢更新（与任务天文件同一把写锁）
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      journal.saveJournalEntry(tmpRoot, '2026-10-15', { time: '07:00', body: `<p>并发${i}</p>` })
+    )
+  )
+  check(
+    '20 个并发新建不丢更新',
+    (await journal.readJournalEntries(tmpRoot, '2026-10-15')).length === 20
+  )
+
   console.log(`\n结果: ${pass} 通过 / ${fail} 失败`)
   fs.rmSync(tmpRoot, { recursive: true, force: true })
-  for (const f of [outFile, dateOutFile, trashOutFile, sanitizeOutFile, attachOutFile, urlOutFile]) {
+  for (const f of [
+    outFile,
+    dateOutFile,
+    trashOutFile,
+    sanitizeOutFile,
+    attachOutFile,
+    urlOutFile,
+    journalOutFile
+  ]) {
     fs.rmSync(f, { force: true })
   }
   process.exit(fail === 0 ? 0 : 1)

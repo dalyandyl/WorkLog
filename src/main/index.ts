@@ -52,7 +52,7 @@ import {
   importAttachmentFile,
   saveAttachmentBuffer
 } from './attachments'
-import type { Meeting, StickyNote } from '../shared/types'
+import type { Meeting, StickyNote, JournalEntryInput } from '../shared/types'
 import { listMeetings, saveMeeting, deleteMeeting } from './meetings'
 import { meetingToMarkdown, meetingExportFileName } from './meetingExport'
 import {
@@ -61,6 +61,13 @@ import {
   listStickyNotes,
   updateStickyNote
 } from './stickyNotes'
+import {
+  deleteJournalEntry,
+  listJournalDates,
+  listJournalRange,
+  readJournalDay,
+  saveJournalEntry
+} from './journal'
 
 // 注：commandLine.appendSwitch 已移至 app.whenReady() 内部执行，
 // 因为在 electron-vite dev 模式下模块顶层的 app/protocol 对象尚未初始化。
@@ -515,7 +522,15 @@ app.whenReady().then(async () => {
       return { ok: true }
     }
   )
-  ipcMain.handle('meetings:delete', (_event, id: string) => deleteMeeting(storageRoot, id))
+  // ⚠️ 必须显式返回 { ok: true }：preload 声明的契约是 `Promise<{ ok: boolean }>`，
+  // 渲染层（MeetingList.deleteMeeting）拿到后第一行就判断 `r.ok`。
+  // 若照旧直接 `return deleteMeeting(...)`（该函数是 Promise<void>，返回 undefined），
+  // 回调里会抛 `TypeError: Cannot read properties of undefined (reading 'ok')` ——
+  // 会发生在异步回调中且无人捕获，表现为「删了但抽屉不关、列表不刷新、没有成功提示」。
+  ipcMain.handle('meetings:delete', async (_event, id: string) => {
+    await deleteMeeting(storageRoot, id)
+    return { ok: true }
+  })
 
   // ---- 便签 ----
   ipcMain.handle('sticky:list', () => listStickyNotes(storageRoot))
@@ -526,6 +541,36 @@ app.whenReady().then(async () => {
       updateStickyNote(storageRoot, id, patch)
   )
   ipcMain.handle('sticky:delete', (_event, id: string) => deleteStickyNote(storageRoot, id))
+
+  // ---- 日志（时间线式个人手记；与任务相互独立，仅支持按需挂载当天任务）----
+  ipcMain.handle('journal:listDates', () => listJournalDates(storageRoot))
+  ipcMain.handle('journal:readDay', (_event, date: string) => readJournalDay(storageRoot, date))
+  ipcMain.handle(
+    'journal:listRange',
+    (_event, opts: { before?: string; limit?: number } | undefined) =>
+      listJournalRange(storageRoot, opts ?? {})
+  )
+  ipcMain.handle('journal:saveEntry', async (_event, date: string, entry: JournalEntryInput) => {
+    try {
+      const saved = await saveJournalEntry(storageRoot, date, entry)
+      return { ok: true, entry: saved }
+    } catch (err) {
+      // 日期非法 / 写盘失败都会走到这里：一定要把失败**显式**告诉渲染层，
+      // 不能返回 undefined（见 memory-bank/06-conventions.md §2 的 IPC 契约规则）。
+      console.error('journal:saveEntry failed:', err)
+      return { ok: false, entry: null, error: String(err) }
+    }
+  })
+  ipcMain.handle('journal:deleteEntry', async (_event, date: string, id: string) => {
+    try {
+      // 返回被删条目，供渲染层交给回收站做快照（条目不存在时为 null，幂等）
+      const removed = await deleteJournalEntry(storageRoot, date, id)
+      return { ok: true, entry: removed }
+    } catch (err) {
+      console.error('journal:deleteEntry failed:', err)
+      return { ok: false, entry: null, error: String(err) }
+    }
+  })
 
   // 单篇导出 Markdown（元信息头 + 正文转换 + 附件清单）
   ipcMain.handle('meetings:export', async (_event, meeting: Meeting) => {

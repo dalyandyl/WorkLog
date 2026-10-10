@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   ExportOptions,
+  JournalDay,
+  JournalEntry,
+  JournalEntryInput,
   Meeting,
   MonthStats,
   NewTaskInput,
@@ -73,11 +76,23 @@ export type WorkLogApi = {
   addStickyNote: (text: string) => Promise<StickyNote>
   updateStickyNote: (id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) => Promise<StickyNote | null>
   deleteStickyNote: (id: string) => Promise<{ ok: boolean }>
+  // ---- 日志 ----
+  listJournalDates: () => Promise<string[]>
+  readJournalDay: (date: string) => Promise<JournalDay>
+  listJournalRange: (opts: { before?: string; limit?: number }) => Promise<JournalDay[]>
+  saveJournalEntry: (
+    date: string,
+    entry: JournalEntryInput
+  ) => Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
+  deleteJournalEntry: (
+    date: string,
+    id: string
+  ) => Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
   getAppInfo: () => Promise<{ appVersion: string; electron: string; chrome: string; node: string; platform: string; arch: string; packaged: boolean }>
   checkUpdate: () => Promise<{ ok: boolean; message?: string }>
   downloadUpdate: () => Promise<{ ok: boolean; message?: string }>
   cancelUpdate: () => Promise<{ ok: boolean }>
-  installUpdate: () => Promise<{ ok: boolean }>
+  installUpdate: () => Promise<{ ok: boolean; message?: string }>
   setUpdateSource: (source: UpdateSource) => Promise<{ ok: boolean }>
   exportReportMd: (md: string, defaultName: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
   exportReportWord: (html: string, defaultName: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
@@ -239,6 +254,23 @@ const api: WorkLogApi = {
   deleteStickyNote: (id: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('sticky:delete', id),
 
+  // ---- 日志 ----
+  listJournalDates: (): Promise<string[]> => ipcRenderer.invoke('journal:listDates'),
+  readJournalDay: (date: string): Promise<JournalDay> =>
+    ipcRenderer.invoke('journal:readDay', date),
+  listJournalRange: (opts: { before?: string; limit?: number }): Promise<JournalDay[]> =>
+    ipcRenderer.invoke('journal:listRange', opts),
+  saveJournalEntry: (
+    date: string,
+    entry: JournalEntryInput
+  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }> =>
+    ipcRenderer.invoke('journal:saveEntry', date, entry),
+  deleteJournalEntry: (
+    date: string,
+    id: string
+  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }> =>
+    ipcRenderer.invoke('journal:deleteEntry', date, id),
+
   // ---- 系统信息 / 自动更新 ----
   getAppInfo: (): Promise<{
     appVersion: string
@@ -254,7 +286,8 @@ const api: WorkLogApi = {
   downloadUpdate: (): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke('update:download'),
   cancelUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:cancel'),
-  installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:install'),
+  installUpdate: (): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke('update:install'),
   setUpdateSource: (source: UpdateSource): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('update:set-source', source),
 
