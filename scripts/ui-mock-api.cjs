@@ -65,6 +65,14 @@ const SETTINGS = {
 
 const noopUnsub = () => () => {}
 
+/**
+ * 记录 `saveJournalDay` 的调用（日期 + 正文长度）。
+ *
+ * 用来验证一条关键数据路径：**在「手动挑的某一天」里写字，是否真的存到了那一天**
+ * （而不是当前/今天）。通过 `window.api.getMockSaves()` 读出来。
+ */
+const mockSaves = []
+
 contextBridge.exposeInMainWorld('api', {
   // ---- 设置 / 环境 ----
   getSettings: async () => SETTINGS,
@@ -144,18 +152,23 @@ contextBridge.exposeInMainWorld('api', {
       updatedAt: '2026-10-10T09:40:00.000Z'
     }
   },
-  saveJournalDay: async (date, day) => ({
-    ok: true,
-    day: {
-      date,
-      body: day.body ?? BODY,
-      attachments: day.attachments ?? [],
-      mountedTasks: day.mountedTasks ?? [],
-      createdAt: '2026-10-10T01:00:00.000Z',
-      updatedAt: new Date().toISOString()
+  saveJournalDay: async (date, day) => {
+    mockSaves.push({ date, bodyLength: (day.body ?? '').length })
+    return {
+      ok: true,
+      day: {
+        date,
+        body: day.body ?? BODY,
+        attachments: day.attachments ?? [],
+        mountedTasks: day.mountedTasks ?? [],
+        createdAt: '2026-10-10T01:00:00.000Z',
+        updatedAt: new Date().toISOString()
+      }
     }
-  }),
+  },
   deleteJournalDay: async () => ({ ok: true, day: null }),
+  /** 仅夹具用：读出 saveJournalDay 的调用记录 */
+  getMockSaves: async () => mockSaves,
 
   // ---- 其余（截某一页时用不到，给安全的空实现）----
   searchTasks: async () => [],

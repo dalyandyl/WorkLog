@@ -27,8 +27,11 @@ const RENDERER = path.join(ROOT, 'out', 'renderer')
 
 const argv = process.argv.slice(2).filter((a) => !a.startsWith('-'))
 const WANT_VIEW = argv[0] || '日志'
-/** 切到目标页后，再点一个按钮（按可见文字包含匹配），用于打开弹窗/编辑器 */
-const CLICK_TEXT = argv[2] || ''
+/** 切到目标页后要依次点击的按钮；每步可写成 `选择器::文字`，用 | 分隔多步 */
+const CLICK_SPECS = (argv[2] || '')
+  .split('|')
+  .map((s) => s.trim())
+  .filter(Boolean)
 // 产物写进 out/（已被 .gitignore 忽略），避免污染工作区
 const OUT_PNG = path.resolve(ROOT, argv[1] || path.join('out', 'ui-shot.png'))
 const OUT_JSON = path.join(ROOT, 'out', 'ui-shot.json')
@@ -209,10 +212,16 @@ app.whenReady().then(async () => {
     log(`点击「${WANT_VIEW}」: ${clicked}`)
     await new Promise((r) => setTimeout(r, 2200))
 
-    if (CLICK_TEXT) {
+    // 支持多步点击：用 | 分隔；每步可写成 `选择器::文字`（在该选择器范围内找按钮）。
+    // 例：npm run ui:shot -- 日志 out/p.png "选择日期|.dp-pop::15"
+    for (const spec of CLICK_SPECS) {
+      const [scope, want] = spec.includes('::') ? spec.split('::') : ['', spec]
       const r = await win.webContents.executeJavaScript(`(() => {
-        const els = [...document.querySelectorAll('button')]
-        const want = ${JSON.stringify(CLICK_TEXT)}
+        const scopeSel = ${JSON.stringify(scope)}
+        const want = ${JSON.stringify(want)}
+        const root = scopeSel ? document.querySelector(scopeSel) : document
+        if (!root) return 'scope-not-found'
+        const els = [...root.querySelectorAll('button')]
         // ⚠️ 必须**先精确匹配**再退回 includes：
         // 曾经用 includes('编辑') 去点右侧的「编辑」按钮，结果先命中了左栏天列表里
         // 预览文字含「编辑器」的那一天（"把编辑器的黄框问题记下来…"），
@@ -222,10 +231,10 @@ app.whenReady().then(async () => {
         const t = exact || loose
         if (!t) return 'not-found'
         t.click()
-        return exact ? 'clicked-exact' : 'clicked-loose'
+        return (exact ? 'exact' : 'loose') + ' → "' + (t.textContent || '').trim().slice(0, 12) + '"'
       })()`)
-      log(`再点击包含「${CLICK_TEXT}」的按钮: ${r}`)
-      await new Promise((r2) => setTimeout(r2, 2200))
+      log(`点击 ${spec} → ${r}`)
+      await new Promise((res) => setTimeout(res, 1200))
     }
 
     const dom = await win.webContents.executeJavaScript(`(() => {
@@ -288,6 +297,28 @@ app.whenReady().then(async () => {
       '*, *::before, *::after { animation: none !important; transition: none !important; }'
     )
     await new Promise((r) => setTimeout(r, 300))
+
+    // WL_MOCK_TYPE=1：往编辑器里真的插一个字，验证「在挑中的那一天写字 → 存到那一天」。
+    // 注意：不能只用 sendInputEvent —— 点完「开始写」后焦点在按钮上，按键不会进编辑器。
+    // 必须先 focus 到 contenteditable，再用 execCommand('insertText') 触发真正的 input 事件
+    // （ProseMirror 靠 beforeinput/input 更新，TipTap 的 onUpdate 才会发火）。
+    if (process.env.WL_MOCK_TYPE === '1') {
+      const typed = await win.webContents.executeJavaScript(`(() => {
+        const pm = document.querySelector('.journal-doc .rich-editor-content .ProseMirror')
+        if (!pm) return 'no-editor'
+        pm.focus()
+        const ok = document.execCommand('insertText', false, 'X')
+        return 'insertText=' + ok + ' text=' + (pm.textContent || '').slice(0, 20)
+      })()`)
+      log('输入模拟: ' + typed)
+      // 防抖 700ms，留足余量再读记录
+      await new Promise((r) => setTimeout(r, 1800))
+    }
+
+    const saves = await win.webContents
+      .executeJavaScript('window.api.getMockSaves ? window.api.getMockSaves() : null')
+      .catch(() => null)
+    if (saves) log(`mock 记录的 saveJournalDay 调用: ${JSON.stringify(saves)}`)
 
     // 截图**紧前**再取一次状态：用来区分「画面状态确实变了」与「截图是旧的」
     const preShot = await win.webContents.executeJavaScript(`(() => ({
