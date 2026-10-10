@@ -131,13 +131,84 @@ function isNewer(remoteVersion: string): boolean {
 
 // ---------------- 流式下载（两通道共用） ----------------
 
+/** 单次请求的建连/首包超时（毫秒） */
+const CONNECT_TIMEOUT_MS = 30_000
+/** 传输过程中允许的最长"无数据"间隔（毫秒）——防止连接假死后无限挂起 */
+const IDLE_TIMEOUT_MS = 45_000
+
+/** 当前下载的取消句柄（null = 没有进行中的下载） */
+let currentAbort: AbortController | null = null
+/** 用户主动取消标记，用于区分"取消"与"超时/网络错误" */
+let userCancelled = false
+
+/**
+ * 取消进行中的更新下载。
+ * 旧实现没有任何取消入口，网络卡住时界面会一直停在"下载中"，只能杀进程。
+ */
+export function cancelUpdateDownload(): { ok: boolean } {
+  if (!currentAbort) return { ok: false }
+  userCancelled = true
+  currentAbort.abort()
+  return { ok: true }
+}
+
+/** 带超时的 fetch：信号在超时或用户取消时中止 */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = CONNECT_TIMEOUT_MS
+): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  const onOuterAbort = (): void => ctrl.abort()
+  init.signal?.addEventListener('abort', onOuterAbort)
+  try {
+    return await net.fetch(url, { ...init, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+    init.signal?.removeEventListener('abort', onOuterAbort)
+  }
+}
+
 async function streamDownload(
   url: string,
   dest: string,
   onProgress?: (percent: number) => void
 ): Promise<string> {
-  const res = await net.fetch(url)
+  const ctrl = new AbortController()
+  currentAbort = ctrl
+  userCancelled = false
+
+  // 无数据看门狗：每收到一块数据就重置；超时则中止连接
+  let idleTimer: NodeJS.Timeout | null = null
+  const armIdle = (): void => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => ctrl.abort(), IDLE_TIMEOUT_MS)
+  }
+  const clearIdle = (): void => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = null
+  }
+
+  /** 把 AbortError 翻译成用户能看懂的原因 */
+  const explainAbort = (): Error =>
+    userCancelled
+      ? new Error('下载已取消')
+      : new Error('网络长时间无响应，下载已中止（可重试或更换镜像源）')
+
+  let res: Response
+  armIdle()
+  try {
+    res = await net.fetch(url, { signal: ctrl.signal })
+  } catch (err) {
+    clearIdle()
+    currentAbort = null
+    if ((err as Error)?.name === 'AbortError') throw explainAbort()
+    throw err
+  }
   if (!res.ok) {
+    clearIdle()
+    currentAbort = null
     let detail = ''
     try {
       detail = (await res.text()).slice(0, 200)
@@ -148,7 +219,11 @@ async function streamDownload(
   }
   const total = Number(res.headers.get('content-length') ?? 0)
   const body = res.body
-  if (!body) throw new Error('下载响应无内容')
+  if (!body) {
+    clearIdle()
+    currentAbort = null
+    throw new Error('下载响应无内容')
+  }
   const reader = body.getReader()
   const writer = createWriteStream(dest)
   const hash = crypto.createHash('sha512')
@@ -157,6 +232,7 @@ async function streamDownload(
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
+      armIdle()
       if (value && value.length > 0) {
         const buf = Buffer.from(value)
         hash.update(buf)
@@ -176,7 +252,15 @@ async function streamDownload(
     })
   } catch (err) {
     writer.destroy()
+    const e = err as Error
+    if (e?.name === 'AbortError') {
+      await fs.rm(dest, { force: true }).catch(() => {})
+      throw explainAbort()
+    }
     throw err
+  } finally {
+    clearIdle()
+    currentAbort = null
   }
   return hash.digest('base64')
 }
@@ -190,7 +274,7 @@ function giteeApiUrl(pathname: string): string {
 }
 
 async function giteeApiGet<T>(pathname: string): Promise<T> {
-  const res = await net.fetch(giteeApiUrl(pathname))
+  const res = await fetchWithTimeout(giteeApiUrl(pathname))
   if (!res.ok) {
     let detail = ''
     try {
@@ -204,7 +288,7 @@ async function giteeApiGet<T>(pathname: string): Promise<T> {
 }
 
 async function giteeFetchText(url: string): Promise<string> {
-  const res = await net.fetch(url)
+  const res = await fetchWithTimeout(url)
   if (!res.ok) throw new Error(`下载 latest.yml 失败 HTTP ${res.status}`)
   return res.text()
 }
@@ -264,7 +348,7 @@ async function githubApiJson(url: string): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' }
   const token = channelCfg('github').token
   if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await net.fetch(url, { headers })
+  const res = await fetchWithTimeout(url, { headers })
   if (!res.ok) {
     let detail = ''
     try {
@@ -300,7 +384,7 @@ async function githubGetPlan(): Promise<UpdatePlan | null> {
     throw new Error('最新发行版缺少 latest.yml，请先发布 GitHub Release')
   }
 
-  const ymlRes = await net.fetch(ymlAsset.browser_download_url)
+  const ymlRes = await fetchWithTimeout(ymlAsset.browser_download_url)
   if (!ymlRes.ok) throw new Error(`下载 latest.yml 失败 HTTP ${ymlRes.status}`)
   const info = parseLatestYml(await ymlRes.text())
 
@@ -420,6 +504,12 @@ export async function downloadUpdate(): Promise<{ ok: boolean; message?: string 
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // 用户主动取消不是错误，单独用 cancelled 事件让界面安静地收起
+    if (userCancelled && message === '下载已取消') {
+      userCancelled = false
+      broadcast('cancelled', {})
+      return { ok: false, message }
+    }
     broadcast('error', { message })
     return { ok: false, message }
   }

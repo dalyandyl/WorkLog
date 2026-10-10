@@ -147,7 +147,7 @@ export default function DatePicker({
         >
           ‹
         </button>
-        <button className="dp-title" onClick={titleClick} title="点击切换 年 / 月 选择">
+        <button className="dp-title" onClick={titleClick} title="点击切换 年 / 月 选择" aria-label="点击切换 年 / 月 选择">
           {view === 'days' && `${viewYear} 年 ${viewMonth + 1} 月`}
           {view === 'months' && `${viewYear} 年`}
           {view === 'years' && `${yearStart} - ${yearStart + 11}`}

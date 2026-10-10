@@ -1,7 +1,6 @@
 import { app, Menu, nativeImage, Notification, Tray } from 'electron'
 import path from 'path'
 import zlib from 'zlib'
-import { readSettings } from './meta'
 
 // ---------- 生成托盘图标 PNG（纯内存，无需图片文件） ----------
 
@@ -101,22 +100,79 @@ export function createTray(showWindow: () => void): void {
 
 // ---------- 提醒 ----------
 
+/** 记录"已经提醒过"的日期，避免同一天重复弹通知 */
 let lastFired = ''
+/** 当前待触发的定时器（不再用 30 秒轮询读盘） */
+let reminderTimer: NodeJS.Timeout | null = null
+/** 已配置的目标时间，供改设置时判断是否需要重排 */
+let reminderKey = ''
 
-/** 每 30 秒检查一次提醒时间；命中且当天未提醒过则弹系统通知 */
-export function startReminder(storageRoot: string): void {
-  setInterval(async () => {
-    const s = await readSettings(storageRoot)
-    if (!s.reminder.enabled) return
-    const now = new Date()
-    const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    if (hm === s.reminder.time && lastFired !== today) {
+function todayStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function fireReminder(): void {
+  new Notification({
+    title: '日志工具提醒',
+    body: '该写今天的日志啦 📝'
+  }).show()
+}
+
+/**
+ * 排定下一次提醒。
+ *
+ * 旧实现是 `setInterval` 每 30 秒读一次 `settings.json` 比对 HH:MM —— 长期运行持续磁盘 IO，
+ * 而且若在 HH:MM 之后才打开开关，当天就永远不会提醒（30 秒采样错过窗口）。
+ * 现在改为**一次性 `setTimeout` 精确排到目标时刻**，触发后再排下一天；
+ * 设置变化时由 `applyReminder` 重排，无需重启应用。
+ */
+function scheduleNext(enabled: boolean, time: string): void {
+  if (reminderTimer) {
+    clearTimeout(reminderTimer)
+    reminderTimer = null
+  }
+  if (!enabled) return
+
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim())
+  if (!m) return
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (hh > 23 || mm > 59) return
+
+  const now = new Date()
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0)
+  if (target.getTime() <= now.getTime()) {
+    // 今天的时间点已过 → 排到明天
+    target.setDate(target.getDate() + 1)
+  }
+  const delay = target.getTime() - now.getTime()
+  reminderTimer = setTimeout(() => {
+    const today = todayStr(new Date())
+    if (lastFired !== today) {
       lastFired = today
-      new Notification({
-        title: '日志工具提醒',
-        body: '该写今天的日志啦 📝'
-      }).show()
+      fireReminder()
     }
-  }, 30000)
+    // 排下一天（递归排程，保持"每天一次"）
+    scheduleNext(true, time)
+  }, delay)
+}
+
+/**
+ * 应用提醒设置：真实设置由调用方读出后传入，避免定时器里反复读盘。
+ * 设置未变化时不做任何事（不打断已排好的定时器）。
+ */
+export function applyReminder(enabled: boolean, time: string): void {
+  const key = `${enabled ? '1' : '0'}|${time}`
+  if (key === reminderKey) return
+  reminderKey = key
+  scheduleNext(enabled, time)
+}
+
+/** 停止提醒并清理定时器 */
+export function stopReminder(): void {
+  if (reminderTimer) {
+    clearTimeout(reminderTimer)
+    reminderTimer = null
+  }
+  reminderKey = ''
 }

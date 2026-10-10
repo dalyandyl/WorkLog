@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CalendarClock, CalendarDays, CheckCircle2 } from 'lucide-react'
-import type { Task } from '../types'
+import type { StatusReporter, Task } from '../types'
 import Modal from './Modal'
 import DatePicker from './DatePicker'
 import { enumerateDates, toDateStr } from '../utils/date'
@@ -13,8 +13,8 @@ interface PostponeModalProps {
   entryDate: string
   onClose: () => void
   /** 延期成功后的回调（传入实际新增的天数） */
-  onPostponed: (added: number) => void
-  onStatus: (msg: string) => void
+  onPostponed: () => void
+  onStatus: StatusReporter
 }
 
 /**
@@ -70,17 +70,17 @@ export default function PostponeModal({
   async function confirm(): Promise<void> {
     if (!task) return
     if (!start || !end || end < start) {
-      onStatus('结束日期不能早于开始日期')
+      onStatus('结束日期不能早于开始日期', 'error')
       return
     }
     const dates = enumerateDates(start, end)
     if (dates.length === 0) {
-      onStatus('没有可延期的日期')
+      onStatus('没有可延期的日期', 'error')
       return
     }
     const r = await window.api.postponeTask(entryDate, task.id, dates)
     if (!r.ok) {
-      onStatus('延期失败：任务不存在或已完成')
+      onStatus('延期失败：任务不存在或已完成', 'error')
       return
     }
     const skipped = dates.length - r.added
@@ -92,10 +92,9 @@ export default function PostponeModal({
   }
 
   function finishPostpone(): void {
-    const r = result
     setResult(null)
     onClose()
-    if (r) onPostponed(r.added)
+    onPostponed()
   }
 
   if (result !== null) {

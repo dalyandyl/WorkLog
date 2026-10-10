@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  DataWarning,
   ExportOptions,
   Meeting,
   MonthStats,
@@ -59,9 +60,7 @@ export interface WorkLogApi {
   writeWeeklySummary(weekKey: string, summary: string): Promise<{ ok: boolean }>
   shiftWeekKey(weekKey: string, delta: number): Promise<string | null>
 
-  // 休息日 / 设置
-  isRest(date: string): Promise<boolean>
-  setRest(date: string, rest: boolean): Promise<{ ok: boolean }>
+  // 设置
   getSettings(): Promise<AppSettings>
   setSettings(s: AppSettings): Promise<void>
 
@@ -132,9 +131,13 @@ export interface WorkLogApi {
   }>
   checkUpdate(): Promise<{ ok: boolean; message?: string }>
   downloadUpdate(): Promise<{ ok: boolean; message?: string }>
+  /** 取消进行中的更新下载（网络卡死时不用再杀进程） */
+  cancelUpdate(): Promise<{ ok: boolean }>
   installUpdate(): Promise<{ ok: boolean }>
   setUpdateSource(source: UpdateSource): Promise<{ ok: boolean }>
   onUpdateEvent(cb: (data: { channel: string; payload: Record<string, unknown> }) => void): () => void
+  /** 数据层告警（文件损坏被隔离 / 写盘失败 / 回收站超限），返回取消订阅 */
+  onDataWarning(cb: (w: DataWarning) => void): () => void
 
   // 报表导出
   exportReportMd(

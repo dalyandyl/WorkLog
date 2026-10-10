@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   Download,
@@ -9,22 +9,29 @@ import {
   Plus,
   Trash2
 } from 'lucide-react'
-import type { Meeting, Tag } from '../types'
+import type { Meeting, StatusReporter, Tag } from '../types'
 import Modal from './Modal'
 import Drawer from './Drawer'
-import MeetingEditor from './MeetingEditor'
 import DatePicker from './DatePicker'
 import DropdownSelect from './DropdownSelect'
+import TagBadgeList from './TagBadge'
+import RichView from './RichView'
+// 体积/内存优化：TipTap 全家族（约 1.3MB chunk）只在真正打开编辑器时才加载，
+// 会议列表本身不需要富文本编辑器。
+const MeetingEditor = lazy(() => import('./MeetingEditor'))
 
 interface MeetingListProps {
   tags: Tag[]
-  onStatus?: (msg: string) => void
+  onStatus?: StatusReporter
 }
 
 type ViewMode = 'card' | 'timeline'
 type SortMode = 'time' | 'created'
 
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 会议列表每页渲染条数（避免一次性把所有卡片挂到 DOM） */
+const MEETING_PAGE_SIZE = 60
 
 function stripHtml(html: string): string {
   const div = document.createElement('div')
@@ -50,16 +57,6 @@ function MeetingDetail({
   onExport: () => void
   onDelete: () => void
 }) {
-  function onClickCapture(e: React.MouseEvent): void {
-    const target = e.target as HTMLElement
-    const a = target.closest?.('a') as HTMLAnchorElement | null
-    if (a && (a.getAttribute('href') ?? '').startsWith('wlattach://')) {
-      e.preventDefault()
-      e.stopPropagation()
-      void window.api.openAttachment(a.getAttribute('href') ?? '')
-    }
-  }
-
   return (
     <div className="meeting-detail">
       <div className="meeting-detail-meta">
@@ -69,14 +66,7 @@ function MeetingDetail({
           {meeting.date}
         </span>
         <div className="meeting-card-tags">
-          {meeting.tags.map((id) => {
-            const t = tagMap.get(id)
-            return t ? (
-              <span key={id} className="task-item-tag" style={{ borderColor: t.color, color: t.color }}>
-                {t.name}
-              </span>
-            ) : null
-          })}
+          <TagBadgeList ids={meeting.tags} tagMap={tagMap} />
           {meeting.tags.length === 0 && <span className="muted">（无标签）</span>}
         </div>
       </div>
@@ -102,16 +92,16 @@ function MeetingDetail({
         </div>
       )}
 
-      <div
-        className="rich-content rich-view meeting-detail-body"
-        onClickCapture={onClickCapture}
-        dangerouslySetInnerHTML={{ __html: meeting.body || '<p></p>' }}
-      />
+      {/* 正文改用 RichView（kind="html"）：统一走 sanitize，并复用其附件点击拦截，
+          不再自己 dangerouslySetInnerHTML 原始 TipTap HTML */}
+      <div className="meeting-detail-body">
+        <RichView content={meeting.body || '<p></p>'} kind="html" />
+      </div>
 
       <div className="meeting-detail-actions">
         <button className="action-btn save-btn" onClick={onEdit}><Pencil size={14} /> 编辑</button>
         <button className="ghost-btn" onClick={onExport}><Download size={14} /> 导出</button>
-        <button className="icon-btn danger" onClick={onDelete} title="删除会议"><Trash2 size={15} /></button>
+        <button className="icon-btn danger" onClick={onDelete} title="删除会议" aria-label="删除会议"><Trash2 size={15} /></button>
       </div>
     </div>
   )
@@ -128,6 +118,13 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<Meeting | null>(null)
   const [detail, setDetail] = useState<Meeting | null>(null)
+  /** 分页渲染的当前页大小（点「加载更多」递增） */
+  const [visibleCount, setVisibleCount] = useState(MEETING_PAGE_SIZE)
+
+  // 筛选条件变化时回到第一页，避免"筛选后仍显示上一次的加载量"
+  useEffect(() => {
+    setVisibleCount(MEETING_PAGE_SIZE)
+  }, [query, selectedTagId, dateFrom, dateTo, sortBy, view, meetings])
 
   const tagMap = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
 
@@ -164,9 +161,20 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   function exportMeeting(m: Meeting): void {
     window.api.exportMeeting(m).then((r) => {
       if (r.ok) onStatus?.(`已导出：${r.path}`)
-      else if (!r.canceled && r.error) onStatus?.('导出失败：' + r.error)
+      else if (!r.canceled && r.error) onStatus?.('导出失败：' + r.error, 'error')
     })
   }
+
+  /**
+   * 会议正文的纯文本缓存。
+   * `stripHtml` 会 `createElement('div')` 再 `innerHTML` 解析整篇正文 ——
+   * 旧实现每次渲染每张卡片都算一遍、搜索时每敲一个键又全量算一遍。
+   */
+  const plainTextById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const m of meetings) map.set(m.id, stripHtml(m.body))
+    return map
+  }, [meetings])
 
   // 组合筛选 + 排序（全量数据在前端完成）
   const filtered = useMemo(() => {
@@ -175,7 +183,7 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
     if (q) {
       list = list.filter((m) => {
         if (m.title.toLowerCase().includes(q)) return true
-        if (stripHtml(m.body).toLowerCase().includes(q)) return true
+        if ((plainTextById.get(m.id) ?? '').toLowerCase().includes(q)) return true
         return m.attachments.some((a) => a.name.toLowerCase().includes(q))
       })
     }
@@ -189,18 +197,24 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
       if (a.date !== b.date) return a.date > b.date ? -1 : 1
       return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
     })
-  }, [meetings, query, selectedTagId, dateFrom, dateTo, sortBy])
+  }, [meetings, query, selectedTagId, dateFrom, dateTo, sortBy, plainTextById])
 
-  // 时间轴视图：按日期分组
+  // 分页渲染：会议会逐年累积，一次性把所有卡片挂到 DOM 上会明显拖慢首屏
+  const visible = useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount]
+  )
+
+  // 时间轴视图：按日期分组（只对当前可见页分组）
   const byDate = useMemo(() => {
     const map = new Map<string, Meeting[]>()
-    for (const m of filtered) {
+    for (const m of visible) {
       const arr = map.get(m.date) ?? []
       arr.push(m)
       map.set(m.date, arr)
     }
     return Array.from(map.entries())
-  }, [filtered])
+  }, [visible])
 
   function dateHeader(d: string): string {
     const today = new Date().toISOString().slice(0, 10)
@@ -212,14 +226,7 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   function renderTags(m: Meeting): React.ReactNode {
     return (
       <>
-        {m.tags.map((id) => {
-          const t = tagMap.get(id)
-          return t ? (
-            <span key={id} className="task-item-tag" style={{ borderColor: t.color, color: t.color }}>
-              {t.name}
-            </span>
-          ) : null
-        })}
+        <TagBadgeList ids={m.tags} tagMap={tagMap} />
         {m.attachments.length > 0 && (
           <span className="meeting-attach-count"><Paperclip size={12} /> {m.attachments.length}</span>
         )}
@@ -228,7 +235,7 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   }
 
   function renderCard(m: Meeting): React.ReactNode {
-    const summary = stripHtml(m.body)
+    const summary = plainTextById.get(m.id) ?? ''
     return (
       <div key={m.id} className="meeting-card" onClick={() => setDetail(m)}>
         <div className="meeting-card-info">
@@ -241,16 +248,16 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           <div className="meeting-card-tags">{renderTags(m)}</div>
         </div>
         <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
+          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown" aria-label="导出 Markdown"><Download size={15} /></button>
+          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议" aria-label="编辑会议"><Pencil size={15} /></button>
+          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议" aria-label="删除会议"><Trash2 size={15} /></button>
         </div>
       </div>
     )
   }
 
   function renderTimelineItem(m: Meeting): React.ReactNode {
-    const summary = stripHtml(m.body)
+    const summary = plainTextById.get(m.id) ?? ''
     return (
       <div key={m.id} className="timeline-item" onClick={() => setDetail(m)}>
         <div className="timeline-content">
@@ -259,9 +266,9 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           <div className="meeting-card-tags">{renderTags(m)}</div>
         </div>
         <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
+          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown" aria-label="导出 Markdown"><Download size={15} /></button>
+          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议" aria-label="编辑会议"><Pencil size={15} /></button>
+          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议" aria-label="删除会议"><Trash2 size={15} /></button>
         </div>
       </div>
     )
@@ -296,10 +303,10 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           title="排序方式"
         />
         <div className="meeting-view-toggle">
-          <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')} title="卡片视图">
+          <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')} title="卡片视图" aria-label="卡片视图">
             ▦ 卡片
           </button>
-          <button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')} title="时间轴视图">
+          <button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')} title="时间轴视图" aria-label="时间轴视图">
             ≡ 时间轴
           </button>
         </div>
@@ -315,7 +322,7 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
           {meetings.length === 0 ? '暂无会议纪要' : '没有符合条件的会议'}
         </div>
       ) : view === 'card' ? (
-        <div className="meeting-cards">{filtered.map((m) => renderCard(m))}</div>
+        <div className="meeting-cards">{visible.map((m) => renderCard(m))}</div>
       ) : (
         <div className="meeting-timeline">
           {byDate.map(([d, list]) => (
@@ -328,6 +335,15 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {filtered.length > visible.length && (
+        <button
+          className="ghost-btn meeting-load-more"
+          onClick={() => setVisibleCount((n) => n + MEETING_PAGE_SIZE)}
+        >
+          加载更多（已显示 {visible.length} / {filtered.length}）
+        </button>
       )}
 
       {/* 只读详情抽屉（单击会议打开） */}
@@ -351,17 +367,19 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
         height={760}
         onClose={() => setEditorOpen(false)}
       >
-        <MeetingEditor
-          key={editing?.id ?? 'new'}
-          tags={tags}
-          meeting={editing}
-          onSave={(m) => {
-            refresh()
-            onStatus?.(`已保存会议「${m.title}」`)
-          }}
-          onClose={() => setEditorOpen(false)}
-          onStatus={onStatus}
-        />
+        <Suspense fallback={<div className="editor-loading">正在加载编辑器…</div>}>
+          <MeetingEditor
+            key={editing?.id ?? 'new'}
+            tags={tags}
+            meeting={editing}
+            onSave={(m) => {
+              refresh()
+              onStatus?.(`已保存会议「${m.title}」`)
+            }}
+            onClose={() => setEditorOpen(false)}
+            onStatus={onStatus}
+          />
+        </Suspense>
       </Modal>
     </div>
   )

@@ -28,9 +28,28 @@ async function addDirToZip(zip: AdmZip, dir: string, base: string): Promise<void
   }
 }
 
+/**
+ * 校验 zip 内所有条目路径安全，拒绝：
+ *   - 绝对路径（`/etc/x`、`C:\x`、`\\server\share`）—— 解压会写到目标目录之外；
+ *   - 含 `..` 的路径段 —— 经典 zip-slip 穿越。
+ * 备份 zip 可能来自 WebDAV 远端或他人分享，必须当作不可信输入。
+ */
+function assertSafeZipEntries(zip: AdmZip): void {
+  for (const entry of zip.getEntries()) {
+    const raw = String(entry.entryName ?? '')
+    const name = raw.replace(/\\/g, '/')
+    const isAbsolute = name.startsWith('/') || /^[a-zA-Z]:/.test(name) || name.startsWith('//')
+    const hasParent = name.split('/').some((seg) => seg === '..')
+    if (isAbsolute || hasParent) {
+      throw new Error(`备份压缩包内含不安全的路径，已中止导入：${raw}`)
+    }
+  }
+}
+
 /** 从 zip 备份恢复（解压到临时目录后合并进日志目录） */
 export async function importBackup(root: string, srcZip: string): Promise<void> {
   const zip = new AdmZip(srcZip)
+  assertSafeZipEntries(zip)
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'worklog-import-'))
   try {
     zip.extractAllTo(tmp, true)

@@ -9,6 +9,7 @@ export type UpdateBubbleState =
 interface UpdateBubbleProps {
   state: UpdateBubbleState | null
   onDownload: () => void
+  onCancel: () => void
   onInstall: () => void
   onRetry: () => void
   onClose: () => void
@@ -21,6 +22,7 @@ interface UpdateBubbleProps {
 export default function UpdateBubble({
   state,
   onDownload,
+  onCancel,
   onInstall,
   onRetry,
   onClose
@@ -34,7 +36,7 @@ export default function UpdateBubble({
           <Download size={14} />
           软件更新
         </span>
-        <button className="wl-close" onClick={onClose} title="关闭">
+        <button className="wl-close" onClick={onClose} title="关闭" aria-label="关闭">
           <X size={15} />
         </button>
       </div>
@@ -56,7 +58,12 @@ export default function UpdateBubble({
             <div className="about-progress">
               <div className="about-progress-fill" style={{ width: `${state.percent}%` }} />
             </div>
-            <div className="update-bubble-percent">{state.percent}%</div>
+            <div className="update-bubble-foot">
+              <div className="update-bubble-percent">{state.percent}%</div>
+              <button className="update-bubble-btn ghost" onClick={onCancel}>
+                取消下载
+              </button>
+            </div>
           </>
         )}
 

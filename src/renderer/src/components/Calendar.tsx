@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { CalendarDays, RefreshCw } from 'lucide-react'
 import { toDateStr } from '../utils/date'
 import { holidayInfoOf, isRestDay, loadHolidayYear, refreshHolidayYear } from '../utils/holidays'
 import DatePicker from './DatePicker'
@@ -18,7 +18,6 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
   // 拉取到新年份数据后自增，触发重渲染刷新标红
   const [, setHolidayVersion] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
-  const [refreshMsg, setRefreshMsg] = useState('')
 
   useEffect(() => {
     setView({ year: selYear, month: selMonth - 1 })
@@ -53,17 +52,16 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
 
   async function refreshCalendar(): Promise<void> {
     setRefreshing(true)
-    setRefreshMsg('')
+    const start = Date.now()
     try {
       const data = await refreshHolidayYear(view.year)
-      setHolidayVersion((v) => v + 1)
-      const hasHoliday =
-        data && (Object.keys(data.holiday).length > 0 || Object.keys(data.workday).length > 0)
-      setRefreshMsg(
-        hasHoliday ? '已更新' : `${view.year} 年节假日安排尚未公布，仅周末标红`
-      )
+      if (data) {
+        setHolidayVersion((v) => v + 1)
+      }
     } finally {
-      setRefreshing(false)
+      // 静态年份数据会瞬间返回，若立即复位则看不到转圈；保证至少转 ~800ms
+      const remain = Math.max(0, 800 - (Date.now() - start))
+      window.setTimeout(() => setRefreshing(false), remain)
     }
   }
 
@@ -78,7 +76,7 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
   return (
     <div className="calendar">
       <div className="cal-head">
-        <button className="cal-nav" onClick={() => shiftMonth(-1)} title="上个月">
+        <button className="cal-nav" onClick={() => shiftMonth(-1)} title="上个月" aria-label="上个月">
           ‹
         </button>
         <DatePicker
@@ -88,7 +86,7 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
           label={`${view.year} 年 ${view.month + 1} 月`}
           title="点击选择日期（年 / 月 / 日）"
         />
-        <button className="cal-nav" onClick={() => shiftMonth(1)} title="下个月">
+        <button className="cal-nav" onClick={() => shiftMonth(1)} title="下个月" aria-label="下个月">
           ›
         </button>
       </div>
@@ -130,13 +128,14 @@ export default function Calendar({ selected, markers, onSelect }: CalendarProps)
       </div>
       <div className="cal-foot-btns">
         <button className="today-btn" onClick={goToday}>
+          <CalendarDays size={13} />
           回到今天
         </button>
-        <button className="today-btn cal-refresh-btn" onClick={refreshCalendar} title="联网重新拉取当前年份节假日">
-          {refreshing ? '更新中…' : <><RefreshCw size={13} /> 更新日历</>}
+        <button className="today-btn cal-refresh-btn" onClick={refreshCalendar} title="联网重新拉取当前年份节假日" aria-label="联网重新拉取当前年份节假日">
+          <RefreshCw size={13} className={refreshing ? 'spin' : ''} />
+          更新日历
         </button>
       </div>
-      {refreshMsg && <div className="cal-refresh-msg">{refreshMsg}</div>}
     </div>
   )
 }

@@ -1,11 +1,23 @@
 import { useEffect, useRef } from 'react'
 import { renderMarkdown } from '../utils/markdown'
+import { sanitizeHtml } from '../utils/sanitize'
 
-/** 只读渲染：Markdown -> HTML（补渲染公式、拦截附件点击） */
-export default function RichView({ content }: { content: string }) {
+interface RichViewProps {
+  content: string
+  /**
+   * 内容形态：
+   * - `markdown`（默认）：任务 / 周总结等 Markdown 正文
+   * - `html`：会议纪要这类由 TipTap 直接产出的 HTML —— 不能再走 markdown-it，
+   *   否则缩进的 HTML 会被当成代码块破坏排版；直接净化后渲染。
+   */
+  kind?: 'markdown' | 'html'
+}
+
+/** 只读渲染：内容 -> 净化后的 HTML（补渲染公式、拦截附件点击） */
+export default function RichView({ content, kind = 'markdown' }: RichViewProps) {
   const ref = useRef<HTMLDivElement>(null)
 
-  const renderedHtml = renderMarkdown(content)
+  const renderedHtml = kind === 'html' ? sanitizeHtml(content) : renderMarkdown(content)
 
   // KaTeX 按需加载：仅在正文包含公式时才动态引入（减少启动内存/解析开销）
   useEffect(() => {

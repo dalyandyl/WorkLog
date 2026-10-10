@@ -6,188 +6,51 @@ import {
   CheckSquare,
   Plus,
   Square,
-  StickyNote,
-  X
+  StickyNote
 } from 'lucide-react'
-import type { PublishRecord, Subtask, Tag, Task } from '../types'
-import { enumerateDates, toDateStr, weekInfoOf, type PublishGranularity } from '../utils/date'
-import MarkdownEditor from './MarkdownEditor'
-import RichView from './RichView'
-import TagPicker from './TagPicker'
-import Modal from './Modal'
-import Drawer from './Drawer'
-import DatePicker from './DatePicker'
-import SubtaskEditor from './SubtaskEditor'
-import DropdownSelect from './DropdownSelect'
-import PostponeModal from './PostponeModal'
+import type { PublishRecord, StatusReporter, Tag, Task } from '../../types'
+import { enumerateDates, toDateStr, type PublishGranularity } from '../../utils/date'
+import Modal from '../Modal'
+import Drawer from '../Drawer'
+import DatePicker from '../DatePicker'
+import DropdownSelect from '../DropdownSelect'
+import PostponeModal from '../PostponeModal'
+import RichView from '../RichView'
+import TagBadgeList from '../TagBadge'
+import PendingTaskCard from './PendingTaskCard'
+import PublishedList, { type PublishedEntry } from './PublishedList'
+import {
+  GRANULARITY_OPTIONS,
+  PUBLISH_WINDOW_DAYS,
+  PUBLISH_WINDOW_STEP,
+  fmtDates,
+  histRangeLabel,
+  inPeriod,
+  loadPendingDraft,
+  newPending,
+  savePendingDraft,
+  type PendingTask
+} from './types'
 
 interface TaskPublishProps {
   tags: Tag[]
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
   onPublished: () => void
   onGoToTags: () => void
+  /** 数据变更版本号：变化时重新拉取已发布列表与发布历史 */
+  dataVersion?: number
 }
 
-const GRANULARITY_OPTIONS: { value: PublishGranularity; label: string }[] = [
-  { value: 'day', label: '按日' },
-  { value: 'week', label: '按周' },
-  { value: 'month', label: '按月' },
-  { value: 'year', label: '按年' }
-]
-
-/** 判断某日是否落在「锚点日期」的指定粒度周期内 */
-function inPeriod(dateStr: string, anchor: string, g: PublishGranularity): boolean {
-  if (g === 'day') return dateStr === anchor
-  if (g === 'week') return weekInfoOf(dateStr).weekKey === weekInfoOf(anchor).weekKey
-  if (g === 'month') return dateStr.slice(0, 7) === anchor.slice(0, 7)
-  return dateStr.slice(0, 4) === anchor.slice(0, 4)
-}
-
-/** 粒度对应的范围说明 */
-function histRangeLabel(g: PublishGranularity, anchor: string): string {
-  if (!anchor) return ''
-  if (g === 'day') return `单日：${anchor}`
-  if (g === 'week') {
-    const wi = weekInfoOf(anchor)
-    return `第 ${wi.week} 周：${wi.start} ~ ${wi.end}`
-  }
-  if (g === 'month') return `月度：${anchor.slice(0, 7)}`
-  return `年度：${anchor.slice(0, 4)}`
-}
-
-/** 待发布任务（批量派发列表中的一项） */
-interface PendingTask {
-  localId: string
-  title: string
-  tags: string[]
-  subtasks: Subtask[]
-  body: string
-  rangeMode: boolean
-  singleDate: string
-  start: string
-  end: string
-}
-
-function newPending(): PendingTask {
-  const today = toDateStr(new Date())
-  return {
-    localId: crypto.randomUUID(),
-    title: '',
-    tags: [],
-    subtasks: [],
-    body: '',
-    rangeMode: false,
-    singleDate: today,
-    start: today,
-    end: today
-  }
-}
-
-/** 待发布条目卡片 */
-function PendingTaskCard({
-  value,
+export default function TaskPublish({
   tags,
-  onChange,
-  onRemove,
+  onStatus,
+  onPublished,
   onGoToTags,
-  onStatus
-}: {
-  value: PendingTask
-  tags: Tag[]
-  onChange: (patch: Partial<PendingTask>) => void
-  onRemove: () => void
-  onGoToTags: () => void
-  onStatus: (msg: string) => void
-}) {
-  const [showSubtasks, setShowSubtasks] = useState(true)
-  const [showBody, setShowBody] = useState(true)
-
-  return (
-    <div className="pending-card">
-      <div className="pending-card-head">
-        <input
-          className="publish-title"
-          placeholder="任务标题"
-          value={value.title}
-          autoFocus
-          onChange={(e) => onChange({ title: e.target.value })}
-        />
-        <button className="icon-btn danger" onClick={onRemove} title="移除该条">
-          <X size={15} />
-        </button>
-      </div>
-
-      <TagPicker
-        selectedIds={value.tags}
-        allTags={tags}
-        onChange={(ids) => onChange({ tags: ids })}
-        onGoToTags={onGoToTags}
-      />
-
-      <div className="publish-dates">
-        <div className="publish-mode">
-          <label>
-            <input
-              type="radio"
-              checked={!value.rangeMode}
-              onChange={() => onChange({ rangeMode: false })}
-            />
-            单日
-          </label>
-          <label>
-            <input
-              type="radio"
-              checked={value.rangeMode}
-              onChange={() => onChange({ rangeMode: true })}
-            />
-            区间
-          </label>
-        </div>
-        {value.rangeMode ? (
-          <div className="publish-range">
-            <DatePicker value={value.start} onChange={(v) => onChange({ start: v })} title="起始日期" />
-            <span>至</span>
-            <DatePicker value={value.end} onChange={(v) => onChange({ end: v })} title="结束日期" />
-          </div>
-        ) : (
-          <DatePicker
-            value={value.singleDate}
-            onChange={(v) => onChange({ singleDate: v })}
-            title="发布日期"
-          />
-        )}
-      </div>
-
-      <div className="pending-toggles">
-        <button className="ghost-btn" onClick={() => setShowSubtasks((v) => !v)}>
-          子任务 {showSubtasks ? '▴' : '▾'}
-        </button>
-        <button className="ghost-btn" onClick={() => setShowBody((v) => !v)}>
-          正文 {showBody ? '▴' : '▾'}
-        </button>
-      </div>
-      {showSubtasks && (
-        <SubtaskEditor
-          subtasks={value.subtasks}
-          tags={tags}
-          onChange={(subs) => onChange({ subtasks: subs })}
-        />
-      )}
-      {showBody && (
-        <MarkdownEditor
-          value={value.body}
-          onChange={(b) => onChange({ body: b })}
-          attachFolder="publish"
-          onStatus={onStatus}
-        />
-      )}
-    </div>
-  )
-}
-
-export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }: TaskPublishProps) {
-  const [showForm, setShowForm] = useState(false)
-  const [pending, setPending] = useState<PendingTask[]>([])
+  dataVersion = 0
+}: TaskPublishProps) {
+  const [pending, setPending] = useState<PendingTask[]>(loadPendingDraft)
+  // 有恢复的草稿时直接展开表单（pending 的初始化在本行之前，可安全读取）
+  const [showForm, setShowForm] = useState(() => pending.length > 0)
   const [history, setHistory] = useState<PublishRecord[]>([])
   const [detail, setDetail] = useState<PublishRecord | null>(null)
   const [detailInstances, setDetailInstances] = useState<{ date: string; task: Task }[]>([])
@@ -202,18 +65,47 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   const [viewEntry, setViewEntry] = useState<{ date: string; task: Task } | null>(null)
   // 延期弹窗当前条目（null = 关闭）
   const [postponeEntry, setPostponeEntry] = useState<{ date: string; task: Task } | null>(null)
+  /** 已发布任务的加载窗口（天）——避免一次性读取全部历史 */
+  const [pubWindow, setPubWindow] = useState(PUBLISH_WINDOW_DAYS)
+  /** 有任务的总天数，用于提示"当前只显示了窗口内的部分" */
+  const [pubTotalDays, setPubTotalDays] = useState(0)
 
   useEffect(() => {
-    window.api.listPublishHistory().then(setHistory)
-  }, [])
+    let cancelled = false
+    window.api.listPublishHistory().then((h) => {
+      if (!cancelled) setHistory(h)
+    })
+    void loadPublished(PUBLISH_WINDOW_DAYS, () => cancelled)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataVersion])
 
-  async function refreshPublished(): Promise<void> {
+  // 待发布草稿持久化：切换视图（组件被卸载）或重启应用后内容仍在
+  useEffect(() => {
+    savePendingDraft(pending)
+  }, [pending])
+
+  /**
+   * 读取"最近 windowDays 天"内已发布的任务。
+   *
+   * 旧实现是 `readTasksMany(listTaskDates())`：把所有历史天文件全读进内存再拍平渲染，
+   * 数据量增长后既是最大卡顿点也是最大内存点。现在只读最近一个窗口，
+   * 更早的内容由用户点「加载更多」按需追加；同时补上卸载后的 cancelled 守卫。
+   */
+  async function loadPublished(windowDays: number, isCancelled: () => boolean): Promise<void> {
     const dates = await window.api.listTaskDates()
-    if (dates.length === 0) {
+    if (isCancelled()) return
+    const cutoff = toDateStr(new Date(Date.now() - (windowDays - 1) * 86400000))
+    const inWindow = dates.filter((d) => d >= cutoff)
+    setPubTotalDays(dates.length)
+    if (inWindow.length === 0) {
       setPublished([])
       return
     }
-    const map = await window.api.readTasksMany(dates)
+    const map = await window.api.readTasksMany(inWindow)
+    if (isCancelled()) return
     const list: { date: string; task: Task }[] = []
     for (const [d, ts] of Object.entries(map)) {
       for (const t of ts) {
@@ -224,10 +116,16 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
     setPublished(list)
   }
 
-  useEffect(() => {
-    refreshPublished()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  /** 供操作后刷新使用：沿用当前窗口 */
+  async function refreshPublished(): Promise<void> {
+    await loadPublished(pubWindow, () => false)
+  }
+
+  function loadMorePublished(): void {
+    const next = pubWindow + PUBLISH_WINDOW_STEP
+    setPubWindow(next)
+    void loadPublished(next, () => false)
+  }
 
   async function togglePublished(entry: { date: string; task: Task }): Promise<void> {
     await window.api.updateTask(entry.date, entry.task.id, { done: !entry.task.done })
@@ -264,18 +162,18 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   async function publishAll(): Promise<void> {
     const valid = pending.filter((p) => p.title.trim())
     if (valid.length === 0) {
-      onStatus('请至少填写一个任务标题')
+      onStatus('请至少填写一个任务标题', 'error')
       return
     }
     if (valid.length !== pending.length) {
-      onStatus(`有 ${pending.length - valid.length} 条未填标题已跳过，请补全后可再次发布`)
+      onStatus(`有 ${pending.length - valid.length} 条未填标题已跳过，请补全后可再次发布`, 'error')
     }
     let okCount = 0
     for (const p of valid) {
       let dates: string[]
       if (p.rangeMode) {
         if (!p.start || !p.end || p.end < p.start) {
-          onStatus(`「${p.title}」结束日期不能早于开始日期，已跳过`)
+          onStatus(`「${p.title}」结束日期不能早于开始日期，已跳过`, 'error')
           continue
         }
         dates = enumerateDates(p.start, p.end)
@@ -283,7 +181,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         dates = [p.singleDate]
       }
       if (dates.length === 0) {
-        onStatus(`「${p.title}」没有可发布的日期，已跳过`)
+        onStatus(`「${p.title}」没有可发布的日期，已跳过`, 'error')
         continue
       }
       await window.api.publishTasks(dates, {
@@ -299,6 +197,10 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
     refreshHistory()
     refreshPublished()
     closeForm()
+    // 全部成功才清空草稿；有被跳过/未填标题的条目则保留，方便用户补全后重发
+    if (valid.length === pending.length && okCount === valid.length) {
+      setPending([])
+    }
   }
 
   async function openDetail(rec: PublishRecord): Promise<void> {
@@ -310,12 +212,6 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
       if (task) list.push({ date: inst.date, task })
     }
     setDetailInstances(list)
-  }
-
-  function fmtDates(dates: string[]): string {
-    if (dates.length === 0) return ''
-    if (dates.length === 1) return dates[0]
-    return `${dates[0]} ~ ${dates[dates.length - 1]}（共 ${dates.length} 个）`
   }
 
   const tagById = new Map(tags.map((t) => [t.id, t]))
@@ -342,14 +238,18 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
         <span className="weekday">支持批量多任务派发；发布后自动同步到所选日期的日报中</span>
       </div>
 
-      <div className="publish-tabs">
+      <div className="publish-tabs" role="tablist" aria-label="任务发布视图">
         <button
+          role="tab"
+          aria-selected={pubTab === 'published'}
           className={pubTab === 'published' ? 'tab-btn active' : 'tab-btn'}
           onClick={() => setPubTab('published')}
         >
           已发布任务
         </button>
         <button
+          role="tab"
+          aria-selected={pubTab === 'history'}
           className={pubTab === 'history' ? 'tab-btn active' : 'tab-btn'}
           onClick={() => setPubTab('history')}
         >
@@ -358,65 +258,16 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
       </div>
 
       {pubTab === 'published' && (
-        <div className="published-list">
-          {published.length === 0 ? (
-            <div className="task-empty">暂无已发布任务</div>
-          ) : (
-            published.map((entry) => (
-              <div
-                key={entry.task.id + entry.date}
-                className={'publish-record' + (entry.task.done ? ' done' : '')}
-                onClick={() => setViewEntry(entry)}
-                title="点击查看详情"
-              >
-                <div className="publish-record-main">
-                  <span className="publish-record-title">{entry.task.title || '（未命名）'}</span>
-                  <span className="publish-record-meta">
-                    {entry.date} · 派发 {new Date(entry.task.publishedAt).toLocaleString()}
-                  </span>
-                  {entry.task.completedAt && (
-                    <span className="publish-record-time">
-                      完成于 {new Date(entry.task.completedAt).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <div className="publish-record-tags">
-                  {entry.task.tags.map((id) => {
-                    const t = tagById.get(id)
-                    if (!t) return null
-                    return (
-                      <span
-                        key={id}
-                        className="task-item-tag"
-                        style={{ borderColor: t.color, color: t.color }}
-                      >
-                        {t.name}
-                      </span>
-                    )
-                  })}
-                </div>
-                <div className="publish-record-actions" onClick={(e) => e.stopPropagation()}>
-                  {!entry.task.done && (
-                    <button
-                      className="icon-btn"
-                      onClick={() => setPostponeEntry(entry)}
-                      title="延期（追加自定义区间，所有天同步）"
-                    >
-                      <CalendarClock size={15} />
-                    </button>
-                  )}
-                  <input
-                    type="checkbox"
-                    className="task-check"
-                    checked={entry.task.done}
-                    onChange={() => togglePublished(entry)}
-                    title="勾选完成"
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <PublishedList
+          published={published}
+          pubWindow={pubWindow}
+          pubTotalDays={pubTotalDays}
+          tagMap={tagById}
+          onOpen={setViewEntry}
+          onPostpone={setPostponeEntry}
+          onToggleDone={(entry) => void togglePublished(entry)}
+          onLoadMore={loadMorePublished}
+        />
       )}
 
       {pubTab === 'history' && (
@@ -461,19 +312,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                   </span>
                 </div>
                 <div className="publish-record-tags">
-                  {rec.tags.map((id) => {
-                    const t = tagById.get(id)
-                    if (!t) return null
-                    return (
-                      <span
-                        key={id}
-                        className="task-item-tag"
-                        style={{ borderColor: t.color, color: t.color }}
-                      >
-                        {t.name}
-                      </span>
-                    )
-                  })}
+                  <TagBadgeList ids={rec.tags} tagMap={tagById} />
                 </div>
               </div>
               ))}
@@ -534,19 +373,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
               )}
             </div>
             <div className="tag-chips">
-              {viewEntry.task.tags.map((id) => {
-                const t = tagById.get(id)
-                if (!t) return null
-                return (
-                  <span
-                    key={id}
-                    className="task-item-tag"
-                    style={{ borderColor: t.color, color: t.color }}
-                  >
-                    {t.name}
-                  </span>
-                )
-              })}
+              <TagBadgeList ids={viewEntry.task.tags} tagMap={tagById} />
               {viewEntry.task.tags.length === 0 && <span className="muted">（无标签）</span>}
             </div>
             {(viewEntry.task.subtasks ?? []).length > 0 && (
@@ -556,19 +383,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                     <span className="subtask-check">{st.done ? <CheckSquare size={13} /> : <Square size={13} />}</span>
                     <span className="subtask-title">{st.title}</span>
                     <span className="subtask-tags">
-                      {st.tags.map((id) => {
-                        const t = tagById.get(id)
-                        if (!t) return null
-                        return (
-                          <span
-                            key={id}
-                            className="task-item-tag"
-                            style={{ borderColor: t.color, color: t.color }}
-                          >
-                            {t.name}
-                          </span>
-                        )
-                      })}
+                      <TagBadgeList ids={st.tags} tagMap={tagById} />
                     </span>
                   </div>
                 ))}
@@ -597,19 +412,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
           <div className="publish-detail">
             <h3 className="publish-detail-title">{detail.title}</h3>
             <div className="tag-chips">
-              {detail.tags.map((id) => {
-                const t = tagById.get(id)
-                if (!t) return null
-                return (
-                  <span
-                    key={id}
-                    className="task-item-tag"
-                    style={{ borderColor: t.color, color: t.color }}
-                  >
-                    {t.name}
-                  </span>
-                )
-              })}
+              <TagBadgeList ids={detail.tags} tagMap={tagById} />
               {detail.tags.length === 0 && <span className="muted">（无标签）</span>}
             </div>
             <div className="publish-detail-meta">
@@ -656,19 +459,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                     <span className="subtask-check">{st.done ? <CheckSquare size={13} /> : <Square size={13} />}</span>
                     <span className="subtask-title">{st.title}</span>
                     <span className="subtask-tags">
-                      {st.tags.map((id) => {
-                        const t = tagById.get(id)
-                        if (!t) return null
-                        return (
-                          <span
-                            key={id}
-                            className="task-item-tag"
-                            style={{ borderColor: t.color, color: t.color }}
-                          >
-                            {t.name}
-                          </span>
-                        )
-                      })}
+                      <TagBadgeList ids={st.tags} tagMap={tagById} />
                     </span>
                   </div>
                 ))}

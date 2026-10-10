@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { RotateCcw, Trash2 } from 'lucide-react'
-import type { TrashItem } from '../types'
+import type { StatusReporter, TrashItem } from '../types'
 
 interface TrashViewProps {
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
   onRestored: () => void
+  /** 数据变更版本号：变化时重新拉取回收站列表 */
+  dataVersion?: number
 }
 
-export default function TrashView({ onStatus, onRestored }: TrashViewProps) {
+export default function TrashView({ onStatus, onRestored, dataVersion = 0 }: TrashViewProps) {
   const [items, setItems] = useState<TrashItem[]>([])
 
   function refresh(): void {
@@ -16,7 +18,8 @@ export default function TrashView({ onStatus, onRestored }: TrashViewProps) {
 
   useEffect(() => {
     refresh()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataVersion])
 
   async function restore(item: TrashItem): Promise<void> {
     const r = await window.api.restoreTrash(item.id)
@@ -72,11 +75,11 @@ export default function TrashView({ onStatus, onRestored }: TrashViewProps) {
                 </span>
               </div>
               <div className="publish-record-actions">
-                <button className="ghost-btn" onClick={() => restore(item)} title="恢复到原日期">
+                <button className="ghost-btn" onClick={() => restore(item)} title="恢复到原日期" aria-label="恢复到原日期">
                   <RotateCcw size={14} />
                   恢复
                 </button>
-                <button className="icon-btn danger" onClick={() => remove(item)} title="永久删除">
+                <button className="icon-btn danger" onClick={() => remove(item)} title="永久删除" aria-label="永久删除">
                   <Trash2 size={15} />
                 </button>
               </div>

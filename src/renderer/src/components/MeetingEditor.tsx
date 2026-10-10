@@ -20,7 +20,7 @@ import {
   TextQuote,
   Trash2
 } from 'lucide-react'
-import type { AttachmentMeta, Meeting, Tag } from '../types'
+import type { AttachmentMeta, Meeting, StatusReporter, Tag } from '../types'
 import TagPicker from './TagPicker'
 import DatePicker from './DatePicker'
 
@@ -31,7 +31,7 @@ interface MeetingEditorProps {
   meeting?: Meeting | null
   onSave: (meeting: Meeting) => void
   onClose: () => void
-  onStatus?: (msg: string) => void
+  onStatus?: StatusReporter
 }
 
 /**
@@ -101,7 +101,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
         insertHtml(`<img src="${url}" alt="${f.name}" />`)
       } catch (err) {
         console.error('upload image failed:', err)
-        onStatus?.('图片上传失败：' + f.name)
+        onStatus?.('图片上传失败：' + f.name, 'error')
       }
     }
   }
@@ -112,7 +112,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
   async function pickAttachments(): Promise<void> {
     const r = await window.api.pickAttachmentFiles(`meetings/${editingIdRef.current}`)
     if (!r.ok || !r.files || r.files.length === 0) {
-      if (!r.canceled && r.error) onStatus?.('附件添加失败：' + r.error)
+      if (!r.canceled && r.error) onStatus?.('附件添加失败：' + r.error, 'error')
       return
     }
     const links = r.files.map((f) => `<a href="${f.url}">📎 ${f.name}</a>`).join(' ')
@@ -176,7 +176,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
   // ---- 保存 ----
   function save(): void {
     if (!title.trim()) {
-      onStatus?.('请填写会议标题')
+      onStatus?.('请填写会议标题', 'error')
       return
     }
     const now = new Date().toISOString()
@@ -195,7 +195,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
         onSave(data)
         onClose()
       } else {
-        onStatus?.('保存失败')
+        onStatus?.('保存失败', 'error')
       }
     })
   }
@@ -260,22 +260,22 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
       {/* 富文本编辑器 */}
       <div className="editor-wrapper">
         <div className="editor-toolbar">
-          <button className="toolbar-btn" onClick={toggleBold} title="加粗"><b>B</b></button>
-          <button className="toolbar-btn" onClick={toggleItalic} title="斜体"><i>I</i></button>
-          <button className="toolbar-btn" onClick={toggleUnderline} title="下划线"><u>U</u></button>
-          <button className="toolbar-btn" onClick={toggleStrike} title="删除线"><s>S</s></button>
-          <button className="toolbar-btn" onClick={toggleHighlight} title="高亮"><Highlighter size={15} /></button>
+          <button className="toolbar-btn" onClick={toggleBold} title="加粗" aria-label="加粗"><b>B</b></button>
+          <button className="toolbar-btn" onClick={toggleItalic} title="斜体" aria-label="斜体"><i>I</i></button>
+          <button className="toolbar-btn" onClick={toggleUnderline} title="下划线" aria-label="下划线"><u>U</u></button>
+          <button className="toolbar-btn" onClick={toggleStrike} title="删除线" aria-label="删除线"><s>S</s></button>
+          <button className="toolbar-btn" onClick={toggleHighlight} title="高亮" aria-label="高亮"><Highlighter size={15} /></button>
           <span className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={() => setHeading(1)} title="标题 1">H1</button>
-          <button className="toolbar-btn" onClick={() => setHeading(2)} title="标题 2">H2</button>
-          <button className="toolbar-btn" onClick={() => setHeading(3)} title="标题 3">H3</button>
+          <button className="toolbar-btn" onClick={() => setHeading(1)} title="标题 1" aria-label="标题 1">H1</button>
+          <button className="toolbar-btn" onClick={() => setHeading(2)} title="标题 2" aria-label="标题 2">H2</button>
+          <button className="toolbar-btn" onClick={() => setHeading(3)} title="标题 3" aria-label="标题 3">H3</button>
           <span className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={toggleBulletList} title="无序列表">•</button>
-          <button className="toolbar-btn" onClick={toggleOrderedList} title="有序列表">1.</button>
-          <button className="toolbar-btn" onClick={toggleBlockquote} title="引用"><TextQuote size={15} /></button>
-          <button className="toolbar-btn" onClick={insertTable} title="插入表格">⊞</button>
-          <button className="toolbar-btn" onClick={insertCodeBlock} title="代码块">&lt;/&gt;</button>
-          <button className="toolbar-btn" onClick={() => imageInputRef.current?.click()} title="插入图片"><ImageIcon size={15} /></button>
+          <button className="toolbar-btn" onClick={toggleBulletList} title="无序列表" aria-label="无序列表">•</button>
+          <button className="toolbar-btn" onClick={toggleOrderedList} title="有序列表" aria-label="有序列表">1.</button>
+          <button className="toolbar-btn" onClick={toggleBlockquote} title="引用" aria-label="引用"><TextQuote size={15} /></button>
+          <button className="toolbar-btn" onClick={insertTable} title="插入表格" aria-label="插入表格">⊞</button>
+          <button className="toolbar-btn" onClick={insertCodeBlock} title="代码块" aria-label="代码块">&lt;/&gt;</button>
+          <button className="toolbar-btn" onClick={() => imageInputRef.current?.click()} title="插入图片" aria-label="插入图片"><ImageIcon size={15} /></button>
         </div>
         <div ref={editorContainerRef} className="rich-editor-content" />
       </div>
@@ -308,7 +308,7 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
               >
                 <FolderOpen size={15} />
               </button>
-              <button className="icon-btn danger" title="删除附件" onClick={() => removeAttachment(a)}>
+              <button className="icon-btn danger" title="删除附件" aria-label="删除附件" onClick={() => removeAttachment(a)}>
                 <Trash2 size={15} />
               </button>
             </div>

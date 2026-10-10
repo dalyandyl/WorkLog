@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Image as ImageIcon, Paperclip } from 'lucide-react'
+import type { StatusReporter } from '../types'
 
 interface MarkdownEditorProps {
   value: string
   onChange: (markdown: string) => void
   attachFolder: string
   placeholder?: string
-  onStatus?: (msg: string) => void
+  onStatus?: StatusReporter
 }
 
 /**
@@ -62,7 +63,7 @@ export default function MarkdownEditor({
         insertAtCursor(`![](${url})\n`)
       } catch (err) {
         console.error('upload image failed:', err)
-        onStatus?.('图片上传失败：' + f.name)
+        onStatus?.('图片上传失败：' + f.name, 'error')
       }
     }
   }
@@ -70,7 +71,7 @@ export default function MarkdownEditor({
   async function pickAttachments(): Promise<void> {
     const r = await window.api.pickAttachmentFiles(attachFolder)
     if (!r.ok || !r.files || r.files.length === 0) {
-      if (!r.canceled && r.error) onStatus?.('附件添加失败：' + r.error)
+      if (!r.canceled && r.error) onStatus?.('附件添加失败：' + r.error, 'error')
       return
     }
     const links = r.files.map((f) => `[📎 ${f.name}](${f.url})`).join(' ')
@@ -155,11 +156,11 @@ export default function MarkdownEditor({
   return (
     <div className="md-editor">
       <div className="md-editor-bar">
-        <button className="md-mini-btn" onClick={() => imageInputRef.current?.click()} title="插入图片（支持多选/粘贴/拖拽）">
+        <button className="md-mini-btn" onClick={() => imageInputRef.current?.click()} title="插入图片（支持多选/粘贴/拖拽）" aria-label="插入图片（支持多选/粘贴/拖拽）">
           <ImageIcon size={14} />
           图片
         </button>
-        <button className="md-mini-btn" onClick={() => void pickAttachments()} title="插入附件（支持多选）">
+        <button className="md-mini-btn" onClick={() => void pickAttachments()} title="插入附件（支持多选）" aria-label="插入附件（支持多选）">
           <Paperclip size={14} />
           附件
         </button>
