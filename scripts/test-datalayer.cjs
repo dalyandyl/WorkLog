@@ -674,6 +674,56 @@ async function main() {
     (await trashMod.restoreTrashItem(tmpRoot, 'nope')).ok === false
   )
 
+  // ---------- 14. 【兼容性硬约束】旧版本必须保留它不认识的字段 ----------
+  //  这条不变式是「未来任务正文改富文本」迁移方案的全部前提：
+  //  方案是给 Task 加一个可选的 bodyHtml 字段、body(markdown) 永不改写。
+  //  如果 readTasks / updateTask 会把未知字段丢掉，那么用户在新版编辑过、
+  //  再用 1.5.4 打开同一份数据时 bodyHtml 就会被抹掉，方案不成立。
+  //  实现上依赖 readTasks 的 { ...t } 展开与 updateTask 的 { ...task, order } 回写，
+  //  所以这里用测试把它钉死，防止将来有人改成「逐字段构造新对象」。
+  console.log('\n[14] 【兼容】未知字段在读写与更新后仍被保留')
+  const compatDate = '2026-12-01'
+  const compatFile = path.join(tmpRoot, '2026', '2026-12-01.json')
+  fs.mkdirSync(path.dirname(compatFile), { recursive: true })
+  fs.writeFileSync(
+    compatFile,
+    JSON.stringify({
+      tasks: [
+        {
+          id: 'compat-1',
+          title: '带未来字段的任务',
+          tags: [],
+          done: false,
+          body: '# markdown 正文',
+          subtasks: [],
+          note: '',
+          publishedAt: '2026-12-01T00:00:00.000Z',
+          completedAt: null,
+          order: 0,
+          createdAt: '2026-12-01T00:00:00.000Z',
+          updatedAt: '2026-12-01T00:00:00.000Z',
+          // 模拟「未来版本写入的富文本字段」
+          bodyHtml: '<h1>markdown 正文</h1>'
+        }
+      ]
+    }),
+    'utf-8'
+  )
+
+  const compatRead = await tasksMod.readTasks(tmpRoot, compatDate)
+  check(
+    'readTasks 保留未知字段 bodyHtml',
+    compatRead[0]?.bodyHtml === '<h1>markdown 正文</h1>',
+    JSON.stringify(compatRead[0]?.bodyHtml)
+  )
+
+  await tasksMod.updateTask(tmpRoot, compatDate, 'compat-1', { title: '改过标题' })
+  const onDisk = JSON.parse(fs.readFileSync(compatFile, 'utf-8'))
+  const compatAfter = onDisk.tasks.find((t) => t.id === 'compat-1')
+  check('updateTask 回写后未知字段仍在文件里', compatAfter?.bodyHtml === '<h1>markdown 正文</h1>', JSON.stringify(compatAfter && Object.keys(compatAfter)))
+  check('updateTask 同时正常改了已知字段', compatAfter?.title === '改过标题', String(compatAfter?.title))
+  check('markdown 正文字段未被改动（无损迁移的另一半）', compatAfter?.body === '# markdown 正文')
+
   console.log(`\n结果: ${pass} 通过 / ${fail} 失败`)
   fs.rmSync(tmpRoot, { recursive: true, force: true })
   for (const f of [
