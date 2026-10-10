@@ -53,6 +53,7 @@ export type WorkLogApi = {
   getSettings: () => Promise<AppSettings>
   setSettings: (s: AppSettings) => Promise<void>
   searchTasks: (query: string) => Promise<SearchHit[]>
+  searchAll: (query: string) => Promise<SearchHit[]>
   rangeStats: (start: string, end: string) => Promise<MonthStats>
   listPublishHistory: () => Promise<PublishRecord[]>
   deletePublishRecord: (id: string) => Promise<{ ok: boolean }>
@@ -170,6 +171,8 @@ const api: WorkLogApi = {
   // ---- 搜索 / 统计 / 导出 ----
   searchTasks: (query: string): Promise<SearchHit[]> =>
     ipcRenderer.invoke('search:tasks', query),
+  searchAll: (query: string): Promise<SearchHit[]> =>
+    ipcRenderer.invoke('search:all', query),
   rangeStats: (start: string, end: string): Promise<MonthStats> =>
     ipcRenderer.invoke('stats:range', start, end),
 

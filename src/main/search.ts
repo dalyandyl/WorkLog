@@ -1,4 +1,5 @@
 import { listDatesWithTasks, readTasks } from './tasks'
+import { listJournalDates, readJournalEntries } from './journal'
 import { readTags } from './tags'
 import type { SearchHit } from '../shared/types'
 
@@ -64,10 +65,81 @@ export async function searchTasks(
         snippet = plainBody.slice(0, 60)
         if (plainBody.length > 60) snippet += '…'
       }
-      hits.push({ date, taskId: t.id, title: t.title, snippet: snippet.trim() })
+      hits.push({ date, kind: 'task', taskId: t.id, title: t.title, snippet: snippet.trim() })
       if (hits.length >= MAX_HITS) break outer
     }
   }
 
   return hits
+}
+
+/** 去掉 HTML 标签得到纯文本（用于日志正文的检索与摘要） */
+function toPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * 检索日志：条目正文（纯文本化后）/ 挂载的任务标题。
+ *
+ * 与 `searchTasks` 同样的策略：从最新日期往前遍历、命中满 MAX_HITS 即停。
+ */
+export async function searchJournal(root: string, query: string): Promise<SearchHit[]> {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+
+  const dates = await listJournalDates(root)
+  const hits: SearchHit[] = []
+
+  outer: for (let i = dates.length - 1; i >= 0; i--) {
+    const date = dates[i]
+    const entries = await readJournalEntries(root, date)
+    for (const e of entries) {
+      const plain = toPlainText(e.body)
+      const idx = plain.toLowerCase().indexOf(q)
+      const inMount = e.mountedTasks.some((m) => m.title.toLowerCase().includes(q))
+      if (idx === -1 && !inMount) continue
+
+      let snippet = ''
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 30)
+        const end = Math.min(plain.length, idx + q.length + 30)
+        snippet = plain.slice(start, end)
+        if (start > 0) snippet = '…' + snippet
+        if (end < plain.length) snippet = snippet + '…'
+      } else {
+        snippet = '挂载任务：' + e.mountedTasks.map((m) => m.title).join('、')
+      }
+
+      hits.push({
+        date,
+        kind: 'journal',
+        taskId: '',
+        entryId: e.id,
+        // 日志条目没有标题字段，用时间当标题更贴近界面上的呈现
+        title: `日志 ${e.time || '--:--'}`,
+        snippet: snippet.trim()
+      })
+      if (hits.length >= MAX_HITS) break outer
+    }
+  }
+
+  return hits
+}
+
+/**
+ * 统一检索任务与日志，按日期倒序合并后截断到 MAX_HITS。
+ *
+ * 两个来源各自已按「最新优先」并在满额时提前停止，这里只做归并。
+ * 同一日期内先任务后日志（保持稳定顺序，便于阅读）。
+ */
+export async function searchAll(root: string, query: string): Promise<SearchHit[]> {
+  const [tasks, journal] = await Promise.all([searchTasks(root, query), searchJournal(root, query)])
+  const merged = [...tasks, ...journal]
+  merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  return merged.slice(0, MAX_HITS)
 }

@@ -29,6 +29,8 @@ import {
   findTrashItem,
   listTrash,
   removeTrashItem,
+  restoreTrashItem,
+  snapshotJournalEntryToTrash,
   snapshotPublishRecordToTrash,
   snapshotTaskToTrash
 } from './trash'
@@ -38,7 +40,7 @@ import {
   shiftWeekKey,
   writeWeeklySummary
 } from './weekly'
-import { searchTasks } from './search'
+import { searchAll, searchTasks } from './search'
 import { rangeStats } from './stats'
 import { lastDataMtime, webdavPull, webdavPush } from './sync'
 import { addPublishRecord, deletePublishRecord, readPublishRecords } from './history'
@@ -66,6 +68,7 @@ import {
   listJournalDates,
   listJournalRange,
   readJournalDay,
+  readJournalEntries,
   saveJournalEntry
 } from './journal'
 
@@ -373,15 +376,9 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('trash:remove', (_event, id: string) => removeTrashItem(storageRoot, id))
   ipcMain.handle('trash:restore', async (_event, id: string) => {
-    // 先重放成功再移出回收站：旧实现「取出即移除」会在重放失败时永久丢失条目
-    const item = await findTrashItem(storageRoot, id)
-    if (!item) return { ok: false }
-    await restoreTasksToDays(
-      storageRoot,
-      item.tasks.map((t) => ({ date: t.date, task: t.task }))
-    )
-    await removeTrashItem(storageRoot, id)
-    return { ok: true }
+    // 恢复编排已下沉到 trash.ts 的 restoreTrashItem（可被 test:data 覆盖）：
+    // 先重放成功再移出回收站，旧实现「取出即移除」会在重放失败时永久丢失条目
+    return restoreTrashItem(storageRoot, id)
   })
 
   // ---- 删除发布历史：整批任务进回收站 ----
@@ -433,8 +430,12 @@ app.whenReady().then(async () => {
   })
 
   // ---- 搜索 / 统计 ----
+  // 保留 search:tasks（只搜任务）供既有调用方使用；search:all 同时返回任务与日志命中
   ipcMain.handle('search:tasks', (_event, query: string) =>
     searchTasks(storageRoot, query)
+  )
+  ipcMain.handle('search:all', (_event, query: string) =>
+    searchAll(storageRoot, query)
   )
   ipcMain.handle('stats:range', (_event, start: string, end: string) =>
     rangeStats(storageRoot, start, end)
@@ -563,7 +564,11 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('journal:deleteEntry', async (_event, date: string, id: string) => {
     try {
-      // 返回被删条目，供渲染层交给回收站做快照（条目不存在时为 null，幂等）
+      // 与任务删除同一套语义：**先快照进回收站、再删除**，失败或崩溃都不丢数据。
+      // 条目不存在时直接返回成功（幂等），不产生空的回收站条目。
+      const target = (await readJournalEntries(storageRoot, date)).find((e) => e.id === id)
+      if (!target) return { ok: true, entry: null }
+      await snapshotJournalEntryToTrash(storageRoot, date, target)
       const removed = await deleteJournalEntry(storageRoot, date, id)
       return { ok: true, entry: removed }
     } catch (err) {

@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { SearchHit } from '../types'
 
 interface SearchBoxProps {
+  /** 点中**任务**命中项 */
   onPick: (date: string, taskId: string) => void
+  /** 点中**日志**命中项 */
+  onPickJournal?: (date: string) => void
 }
 
-export default function SearchBox({ onPick }: SearchBoxProps) {
+export default function SearchBox({ onPick, onPickJournal }: SearchBoxProps) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [open, setOpen] = useState(false)
@@ -37,7 +40,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
     }
     timer.current = window.setTimeout(async () => {
       const seq = ++reqSeq.current
-      const r = await window.api.searchTasks(q)
+      const r = await window.api.searchAll(q)
       if (seq !== reqSeq.current) return
       setHits(r)
       setOpen(true)
@@ -52,7 +55,8 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
     setOpen(false)
     setQ('')
     setActive(-1)
-    onPick(h.date, h.taskId)
+    if (h.kind === 'journal') onPickJournal?.(h.date)
+    else onPick(h.date, h.taskId)
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
@@ -85,10 +89,10 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
     <div className="search-wrap" ref={rootRef}>
       <input
         className="search-input"
-        placeholder="搜索任务..."
+        placeholder="搜索任务与日志..."
         value={q}
         role="combobox"
-        aria-label="搜索任务"
+        aria-label="搜索任务与日志"
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -106,7 +110,9 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
           ) : (
             hits.map((h, i) => (
               <button
-                key={h.taskId}
+                // 区间共享任务会让同一个 taskId 命中多天，所以 key 必须带上日期；
+                // 日志用 entryId（同一天也可能有多条）
+                key={`${h.date}-${h.entryId ?? h.taskId}-${i}`}
                 id={`${listId}-${i}`}
                 role="option"
                 aria-selected={i === active}
@@ -114,7 +120,14 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(h)}
               >
-                <span className="search-hit-date">{h.date}</span>
+                <span className="search-hit-top">
+                  <span className="search-hit-date">{h.date}</span>
+                  <span
+                    className={h.kind === 'journal' ? 'search-hit-kind journal' : 'search-hit-kind'}
+                  >
+                    {h.kind === 'journal' ? '日志' : '任务'}
+                  </span>
+                </span>
                 <span className="search-hit-title">{h.title}</span>
                 <span className="search-hit-snippet">{h.snippet}</span>
               </button>

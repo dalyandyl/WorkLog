@@ -108,7 +108,12 @@ export interface WeeklySummary {
 /** 搜索命中 */
 export interface SearchHit {
   date: string
+  /** 命中来源：`task` = 任务（默认，兼容旧调用）；`journal` = 日志条目 */
+  kind?: 'task' | 'journal'
+  /** 任务 id；日志命中时为空串（保留字段以兼容既有调用方） */
   taskId: string
+  /** 日志条目 id（仅 kind === 'journal' 时有值） */
+  entryId?: string
   title: string
   snippet: string
 }
@@ -153,12 +158,25 @@ export interface TrashedTask {
   task: Task
 }
 
-/** 回收站条目（一次整批删除） */
+/** 回收站中的单条日志条目（含其原属日期） */
+export interface TrashedJournalEntry {
+  date: string
+  entry: JournalEntry
+}
+
+/**
+ * 回收站条目（一次整批删除）。
+ *
+ * 目前有两类，靠 `journal` 字段区分：
+ *   - **任务**：`tasks` 有内容、`journal` 为 undefined
+ *   - **日志**：`journal` 有值、`tasks` 为**空数组**（不是 undefined，避免调用方直接 `.map` 抛错）
+ */
 export interface TrashItem {
   id: string
   title: string
   deletedAt: string
   tasks: TrashedTask[]
+  journal?: TrashedJournalEntry
 }
 
 /** 导出 Markdown 的选项 */

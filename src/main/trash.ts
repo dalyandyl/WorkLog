@@ -1,7 +1,8 @@
-import type { PublishRecord, TrashItem, TrashedTask } from '../shared/types'
+import type { JournalEntry, PublishRecord, TrashItem, TrashedTask } from '../shared/types'
 import { readJson, writeJson, withDataLock, reportDataWarning } from './jsonStore'
 import { trashPath } from './paths'
-import { datesOfTask, readTasks } from './tasks'
+import { datesOfTask, readTasks, restoreTasksToDays } from './tasks'
+import { saveJournalEntry } from './journal'
 
 export { trashPath }
 
@@ -112,6 +113,58 @@ export interface SnapshotResult {
   taskIds: string[]
   /** 实际快照的实例条数 */
   count: number
+}
+
+/**
+ * 把一条日志条目快照进回收站。
+ *
+ * 与 `snapshotTaskToTrash` 同样**不持有写锁**（`addTrashItem` 自己会加）：
+ * 调用方负责「先快照、后删除」，保证删除失败或崩溃时不丢数据。
+ * `tasks` 写空数组（而非 undefined），让回收站详情能无脑遍历。
+ */
+export async function snapshotJournalEntryToTrash(
+  root: string,
+  date: string,
+  entry: JournalEntry
+): Promise<{ ok: boolean }> {
+  await addTrashItem(root, {
+    id: crypto.randomUUID(),
+    title: `日志 ${date}${entry.time ? ' ' + entry.time : ''}`,
+    deletedAt: new Date().toISOString(),
+    tasks: [],
+    journal: { date, entry }
+  })
+  return { ok: true }
+}
+
+/**
+ * 从回收站恢复一个条目（任务或日志）。
+ *
+ * **先重放成功、再移出回收站** —— 旧实现「取出即移除」会在重放失败时永久丢数据。
+ * 从 IPC 层下沉到这里，既与 `snapshotTaskToTrash` 对称，也让它能被 `test:data` 覆盖。
+ *
+ * 注意本函数**不持仓写锁**地串联多个各自加锁的步骤（`saveJournalEntry` / `restoreTasksToDays`
+ * / `removeTrashItem` 各自加锁），符合「组合函数不持锁」的约定；失败会在中途抛出，
+ * 此时条目仍留在回收站里，数据不丢。
+ */
+export async function restoreTrashItem(root: string, id: string): Promise<{ ok: boolean }> {
+  const item = await findTrashItem(root, id)
+  if (!item) return { ok: false }
+
+  if (item.journal) {
+    // 日志：按快照里的日期与 id 重新写入（saveJournalEntry 是按 id upsert，天然幂等）
+    await saveJournalEntry(root, item.journal.date, item.journal.entry)
+  } else {
+    // 任务：兜底 tasks 可能缺失/非数组（半损坏的 trash.json），避免直接 .map 抛错
+    const trashed = Array.isArray(item.tasks) ? item.tasks : []
+    await restoreTasksToDays(
+      root,
+      trashed.map((t) => ({ date: t.date, task: t.task }))
+    )
+  }
+
+  await removeTrashItem(root, id)
+  return { ok: true }
 }
 
 /**

@@ -91,6 +91,17 @@ require(path.join(root, 'node_modules', 'esbuild')).buildSync({
   outfile: journalOutFile
 })
 
+// 搜索（search.ts -> tasks/tags/journal）：验证日志被纳入检索
+const searchOutFile = path.join(os.tmpdir(), 'wl-search-test.cjs')
+require(path.join(root, 'node_modules', 'esbuild')).buildSync({
+  entryPoints: [path.join(root, 'src', 'main', 'search.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outfile: searchOutFile,
+  external: ['electron']
+})
+
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-data-'))
 let pass = 0
 let fail = 0
@@ -584,6 +595,85 @@ async function main() {
     (await journal.readJournalEntries(tmpRoot, '2026-10-15')).length === 20
   )
 
+  // ---------- 13. 日志纳入搜索与回收站（Phase 1e） ----------
+  console.log('\n[13] 日志纳入搜索与回收站')
+  const search = require(searchOutFile)
+
+  // 造一条含特征词的日志 + 一个含特征词的任务
+  await journal.saveJournalEntry(tmpRoot, '2026-11-01', {
+    time: '10:00',
+    body: '<p>今天研究了<strong>苹果派</strong>的做法</p>'
+  })
+  await tasksMod.publishTasks(tmpRoot, ['2026-11-01'], { title: '买苹果派原料' })
+
+  const jHits = await search.searchJournal(tmpRoot, '苹果派')
+  check(
+    'searchJournal 能命中日志正文（HTML 已纯文本化）',
+    jHits.length === 1 && jHits[0].kind === 'journal' && !!jHits[0].entryId,
+    JSON.stringify(jHits.map((h) => h.title))
+  )
+  check('日志命中项的 snippet 含关键词上下文', jHits[0].snippet.includes('苹果派'), jHits[0].snippet)
+
+  const allHits = await search.searchAll(tmpRoot, '苹果派')
+  const kinds = allHits.map((h) => h.kind).sort()
+  check(
+    'searchAll 同时返回任务与日志命中',
+    kinds.includes('task') && kinds.includes('journal'),
+    JSON.stringify(kinds)
+  )
+  check('searchAll 按日期倒序', allHits.every((h, i) => i === 0 || allHits[i - 1].date >= h.date))
+  check(
+    'searchTasks 仍然只返回任务（向后兼容）',
+    (await search.searchTasks(tmpRoot, '苹果派')).every((h) => h.kind === 'task')
+  )
+  check('空关键词返回空数组', (await search.searchAll(tmpRoot, '   ')).length === 0)
+
+  // 回收站闭环：快照 → 删除 → 恢复
+  const doomed = await journal.saveJournalEntry(tmpRoot, '2026-11-02', {
+    time: '15:30',
+    body: '<p>待删除的日志</p>'
+  })
+  const journalSnap = await trashMod.snapshotJournalEntryToTrash(tmpRoot, '2026-11-02', doomed)
+  check('日志条目可快照进回收站', journalSnap.ok === true)
+
+  const tItems = await trashMod.listTrash(tmpRoot)
+  const tItem = tItems.find((i) => i.journal)
+  check(
+    '回收站条目带 journal 字段且 tasks 为空数组',
+    !!tItem &&
+      Array.isArray(tItem.tasks) &&
+      tItem.tasks.length === 0 &&
+      tItem.journal.entry.id === doomed.id,
+    JSON.stringify(tItem && { title: tItem.title, hasJournal: !!tItem.journal })
+  )
+  check(
+    '回收站标题包含日期与时间',
+    !!tItem && tItem.title.includes('2026-11-02') && tItem.title.includes('15:30')
+  )
+
+  await journal.deleteJournalEntry(tmpRoot, '2026-11-02', doomed.id)
+  check(
+    '删除后日志文件消失（该天仅此一条）',
+    (await journal.readJournalEntries(tmpRoot, '2026-11-02')).length === 0
+  )
+
+  const restored = await trashMod.restoreTrashItem(tmpRoot, tItem.id)
+  check('从回收站恢复日志条目成功', restored.ok === true)
+  const back = await journal.readJournalEntries(tmpRoot, '2026-11-02')
+  check(
+    '恢复后条目内容与 id 完整回来',
+    back.length === 1 && back[0].id === doomed.id && back[0].body === '<p>待删除的日志</p>',
+    JSON.stringify(back.map((e) => e.id))
+  )
+  check(
+    '恢复后该条目已移出回收站',
+    !(await trashMod.listTrash(tmpRoot)).some((i) => i.id === tItem.id)
+  )
+  check(
+    '恢复不存在的 id 返回 ok:false',
+    (await trashMod.restoreTrashItem(tmpRoot, 'nope')).ok === false
+  )
+
   console.log(`\n结果: ${pass} 通过 / ${fail} 失败`)
   fs.rmSync(tmpRoot, { recursive: true, force: true })
   for (const f of [
@@ -593,7 +683,8 @@ async function main() {
     sanitizeOutFile,
     attachOutFile,
     urlOutFile,
-    journalOutFile
+    journalOutFile,
+    searchOutFile
   ]) {
     fs.rmSync(f, { force: true })
   }

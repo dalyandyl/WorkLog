@@ -178,14 +178,14 @@ export default function JournalView({
   }
 
   async function deleteEntry(entry: JournalEntry): Promise<void> {
-    if (!window.confirm('确定删除这条日志？此操作不可恢复。')) return
+    if (!window.confirm('确定删除这条日志？会先移入回收站，可以恢复。')) return
     try {
       const r = await window.api.deleteJournalEntry(date, entry.id)
       if (!r.ok) {
         onStatus?.('删除失败：' + (r.error ?? '未知错误'), 'error')
         return
       }
-      onStatus?.('日志已删除', 'success')
+      onStatus?.('日志已移入回收站', 'success')
       if (viewMode === 'day') await loadDay(date)
       else await loadTimeline()
     } catch (err) {

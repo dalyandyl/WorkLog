@@ -69,6 +69,7 @@ export interface WorkLogApi {
 
   // 搜索 / 统计
   searchTasks(query: string): Promise<SearchHit[]>
+  searchAll(query: string): Promise<SearchHit[]>
   rangeStats(start: string, end: string): Promise<MonthStats>
 
   // 发布历史

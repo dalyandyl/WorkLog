@@ -283,7 +283,18 @@ export default function App() {
           <span className="brand-name">日志工具</span>
         </div>
         <div className="topbar-right">
-          <SearchBox onPick={(d, taskId) => { setMode('day'); setDate(d); setDaySel({ date: d, taskId }) }} />
+          <SearchBox
+            onPick={(d, taskId) => {
+              setMode('day')
+              setDate(d)
+              setDaySel({ date: d, taskId })
+            }}
+            onPickJournal={(d) => {
+              // 点中日志命中项 → 切到日志页并跳到那天
+              setMode('journal')
+              setDate(d)
+            }}
+          />
         </div>
       </header>
 
