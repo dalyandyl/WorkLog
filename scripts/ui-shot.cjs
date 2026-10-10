@@ -212,10 +212,17 @@ app.whenReady().then(async () => {
     if (CLICK_TEXT) {
       const r = await win.webContents.executeJavaScript(`(() => {
         const els = [...document.querySelectorAll('button')]
-        const t = els.find(b => (b.textContent || '').includes(${JSON.stringify(CLICK_TEXT)}))
+        const want = ${JSON.stringify(CLICK_TEXT)}
+        // ⚠️ 必须**先精确匹配**再退回 includes：
+        // 曾经用 includes('编辑') 去点右侧的「编辑」按钮，结果先命中了左栏天列表里
+        // 预览文字含「编辑器」的那一天（"把编辑器的黄框问题记下来…"），
+        // 于是夹具点错了目标、还把当天切成了那一天 —— 看起来像产品 bug。
+        const exact = els.find(b => (b.textContent || '').trim() === want)
+        const loose = els.find(b => (b.textContent || '').includes(want))
+        const t = exact || loose
         if (!t) return 'not-found'
         t.click()
-        return 'clicked'
+        return exact ? 'clicked-exact' : 'clicked-loose'
       })()`)
       log(`再点击包含「${CLICK_TEXT}」的按钮: ${r}`)
       await new Promise((r2) => setTimeout(r2, 2200))
@@ -237,7 +244,16 @@ app.whenReady().then(async () => {
           editorLineHeight: cs('.journal-doc .rich-editor-content', 'lineHeight'),
           toolbarButtons: document.querySelectorAll('.journal-doc .toolbar-btn').length,
           proseMirror: !!q('.journal-doc .rich-editor-content .ProseMirror'),
-          mountedChips: document.querySelectorAll('.journal-mounted-item').length
+          mountedChips: document.querySelectorAll('.journal-mounted-item').length,
+          // 诊断用：读/写态到底切没切、按钮是否被禁用
+          actionButtons: [...document.querySelectorAll('.journal-doc-actions button')].map((b) => ({
+            text: (b.textContent || '').trim().slice(0, 8),
+            disabled: !!b.disabled
+          })),
+          richViewPresent: !!q('.journal-doc .rich-view'),
+          editorPresent: !!q('.journal-doc .editor-wrapper'),
+          blankState: !!q('.journal-blank'),
+          heading: q('.journal-doc-title h2') ? q('.journal-doc-title h2').textContent : null
         },
         // 【共用编辑器回归检查】会议纪要等页面用的是同一个 RichTextEditor，
         // 必须仍是"盒子式"（有边框、14px），不能被日志的纸张化样式污染。
@@ -272,6 +288,26 @@ app.whenReady().then(async () => {
       '*, *::before, *::after { animation: none !important; transition: none !important; }'
     )
     await new Promise((r) => setTimeout(r, 300))
+
+    // 截图**紧前**再取一次状态：用来区分「画面状态确实变了」与「截图是旧的」
+    const preShot = await win.webContents.executeJavaScript(`(() => ({
+      editorPresent: !!document.querySelector('.journal-doc .editor-wrapper'),
+      toolbarButtons: document.querySelectorAll('.journal-doc .toolbar-btn').length,
+      actionText: [...document.querySelectorAll('.journal-doc-actions button')].map(b => (b.textContent||'').trim()).join('|'),
+      heading: (document.querySelector('.journal-doc-title h2')||{}).textContent || null
+    }))()`)
+    log('截图前状态: ' + JSON.stringify(preShot))
+
+    // ⚠️ 还必须强制一次重绘：
+    // 窗口是 show:false 的，Chromium 可能给出**过期的合成帧** ——
+    // 实测出现过「DOM 已经是写态（14 个工具按钮、按钮文案=完成，截图前刚查过），
+    // 但截出来的 PNG 仍是上一次的读态画面」。
+    // invalidate() + 一次 1px 尺寸抖动，能可靠地把最新一帧逼出来。
+    win.webContents.invalidate()
+    const [cw, ch] = win.getContentSize()
+    win.setContentSize(cw, ch + 1)
+    win.setContentSize(cw, ch)
+    await new Promise((r) => setTimeout(r, 450))
 
     const img = await win.webContents.capturePage()
     fs.writeFileSync(OUT_PNG, img.toPNG())

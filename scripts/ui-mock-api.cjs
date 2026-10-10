@@ -116,17 +116,34 @@ contextBridge.exposeInMainWorld('api', {
   // ---- 日志 ----
   listJournalDates: async () => SUMMARIES.map((s) => s.date),
   listJournalSummaries: async () => SUMMARIES,
-  readJournalDay: async (date) => ({
-    date,
-    body: BODY,
-    attachments: [{ id: 'at1', name: '配料表.xlsx', url: 'wlattach://attachments/journal/x.xlsx', type: 'file' }],
-    mountedTasks: [
-      { taskId: 't1', date, title: '把黄框查清楚', done: false },
-      { taskId: 't2', date, title: '整理配料表', done: true }
-    ],
-    createdAt: '2026-10-10T01:00:00.000Z',
-    updatedAt: '2026-10-10T09:40:00.000Z'
-  }),
+  // 只有 SUMMARIES 里列出的日期有内容，其它日期返回 null（用于检验「未写过的空白页」）
+  // WL_MOCK_BLANK=1 可强制所有日期都返回空，用来单独截「空白页」状态
+  readJournalDay: async (date) => {
+    if (process.env.WL_MOCK_BLANK === '1') {
+      return {
+        date,
+        body: '',
+        attachments: [],
+        mountedTasks: [],
+        createdAt: '',
+        updatedAt: ''
+      }
+    }
+    if (!SUMMARIES.some((s) => s.date === date)) return null
+    return {
+      date,
+      body: BODY,
+      attachments: [
+        { id: 'at1', name: '配料表.xlsx', url: 'wlattach://attachments/journal/x.xlsx', type: 'file' }
+      ],
+      mountedTasks: [
+        { taskId: 't1', date, title: '把黄框查清楚', done: false },
+        { taskId: 't2', date, title: '整理配料表', done: true }
+      ],
+      createdAt: '2026-10-10T01:00:00.000Z',
+      updatedAt: '2026-10-10T09:40:00.000Z'
+    }
+  },
   saveJournalDay: async (date, day) => ({
     ok: true,
     day: {

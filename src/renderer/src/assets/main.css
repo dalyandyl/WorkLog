@@ -6454,3 +6454,47 @@ input[type='radio']:focus-visible {
   gap: 10px;
   margin-top: 12px;
 }
+
+/* 未写过的日期：给一个明确的空白页与入口，而不是一片空白 */
+.journal-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 70px 16px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.journal-blank p {
+  margin: 0;
+}
+
+/* 读态下的附件行 */
+.journal-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.journal-attach-item {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-attach-item:hover {
+  border-color: var(--accent-ring);
+}

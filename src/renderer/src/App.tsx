@@ -73,6 +73,15 @@ const NAV_GROUPS: { name: '日志' | '任务' | '分析' | '管理' }[] = [
 export default function App() {
   const [date, setDate] = useState(() => toDateStr(new Date()))
   const [mode, setMode] = useState<Mode>('day')
+  /**
+   * 日志页的「外部显式跳转」令牌。
+   *
+   * 日志页**自己管日期**（用户要求：左上角全局日历的点击不要带动日志页）。
+   * 只有需要主动跳过去时才用它 —— 目前只有「全局搜索命中一条日志」。
+   * 用 nonce 而不是直接传日期，是为了让「同一天再次命中」也能触发跳转，
+   * 也避免 App 的其它重渲染把日志页的日期拽回去。
+   */
+  const [journalJump, setJournalJump] = useState<{ date: string; nonce: number } | undefined>()
   const [weekKey, setWeekKey] = useState(() => weekInfoOf(toDateStr(new Date())).weekKey)
   const [daySel, setDaySel] = useState<{ date: string; taskId: string | null }>({
     date: toDateStr(new Date()),
@@ -290,9 +299,9 @@ export default function App() {
               setDaySel({ date: d, taskId })
             }}
             onPickJournal={(d) => {
-              // 点中日志命中项 → 切到日志页并跳到那天
+              // 点中日志命中项 → 切到日志页并跳到那天（走显式跳转令牌，不改全局日期）
+              setJournalJump((prev) => ({ date: d, nonce: (prev?.nonce ?? 0) + 1 }))
               setMode('journal')
-              setDate(d)
             }}
           />
         </div>
@@ -365,10 +374,10 @@ export default function App() {
 
           {mode === 'journal' && (
             <JournalView
-              date={date}
+              initialDate={date}
+              jumpTo={journalJump}
               dataVersion={dataVersion}
               onStatus={notify}
-              onDateChange={selectDate}
               onOpenTask={(taskDate, taskId) => {
                 // 点击日志里关联的任务 → 跳到「任务」页并选中它
                 selectDate(taskDate)
