@@ -7,6 +7,7 @@ import {
   ChevronDown,
   FileText,
   Megaphone,
+  NotebookPen,
   Send,
   Settings,
   StickyNote,
@@ -27,13 +28,15 @@ const SettingsModal = lazy(() => import('./components/SettingsModal'))
 const MeetingList = lazy(() => import('./components/MeetingList'))
 const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'))
 const StickyNotesView = lazy(() => import('./components/StickyNotesView'))
+// 日志页含 TipTap（与会议共用 RichTextEditor），必须懒加载，否则会把富文本库拉进主包
+const JournalView = lazy(() => import('./components/JournalView'))
 import DayView from './components/DayView'
 import UpdateBubble, { type UpdateBubbleState } from './components/UpdateBubble'
 import ToastStack, { useToasts } from './components/Toast'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
-type Mode = 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting' | 'announce' | 'sticky'
+type Mode = 'journal' | 'publish' | 'day' | 'week' | 'stats' | 'report' | 'tags' | 'trash' | 'meeting' | 'announce' | 'sticky'
 
 interface NavItem {
   key: Mode
@@ -42,9 +45,14 @@ interface NavItem {
   group: '日志' | '任务' | '分析' | '管理'
 }
 
+// 导航与「日志 / 任务」两个域一一对应：
+//   「日志」= 个人手记（时间线式），「任务」= 待办与派发。
+// 周报/报表都基于**任务**汇总，因此归在「任务」组，不要放进「日志」组，
+// 否则两个域又混在一起了（这正是本次拆分的初衷）。
 const NAV_ITEMS: NavItem[] = [
-  { key: 'day', label: '日报', icon: CalendarDays, group: '日志' },
-  { key: 'week', label: '周报', icon: CalendarRange, group: '日志' },
+  { key: 'journal', label: '日志', icon: NotebookPen, group: '日志' },
+  { key: 'day', label: '任务', icon: CalendarDays, group: '任务' },
+  { key: 'week', label: '周报', icon: CalendarRange, group: '任务' },
   { key: 'publish', label: '任务发布', icon: Send, group: '任务' },
   { key: 'stats', label: '统计', icon: BarChart3, group: '分析' },
   { key: 'report', label: '报表', icon: FileText, group: '分析' },
@@ -341,6 +349,20 @@ export default function App() {
               onPublished={refreshTaskDates}
               onGoToTags={() => setMode('tags')}
               dataVersion={dataVersion}
+            />
+          )}
+
+          {mode === 'journal' && (
+            <JournalView
+              date={date}
+              dataVersion={dataVersion}
+              onStatus={notify}
+              onOpenTask={(taskDate, taskId) => {
+                // 点击日志里挂载的任务 → 跳到「任务」页并选中它
+                selectDate(taskDate)
+                setDaySel({ date: taskDate, taskId })
+                setMode('day')
+              }}
             />
           )}
 
