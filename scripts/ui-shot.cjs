@@ -234,10 +234,19 @@ app.whenReady().then(async () => {
     // 支持多步点击：用 | 分隔；每步可写成 `选择器::文字`（在该选择器范围内找按钮）。
     // 例：npm run ui:shot -- 日志 out/p.png "选择日期|.dp-pop::15"
     for (const spec of CLICK_SPECS) {
-      const [scope, want] = spec.includes('::') ? spec.split('::') : ['', spec]
+      // 支持三种写法：
+      //   `文字`                 —— 全页先精确匹配再退回包含
+      //   `选择器::文字`          —— 在该选择器范围内找按钮（用于弹窗内部）
+      //   `sel=选择器`            —— 直接点该选择器的第一个元素（用于**纯图标按钮**，没有文字可匹配）
       const r = await win.webContents.executeJavaScript(`(() => {
-        const scopeSel = ${JSON.stringify(scope)}
-        const want = ${JSON.stringify(want)}
+        const spec = ${JSON.stringify(spec)}
+        if (spec.startsWith('sel=')) {
+          const el = document.querySelector(spec.slice(4))
+          if (!el) return 'sel-not-found'
+          el.click()
+          return 'sel → ' + spec.slice(4)
+        }
+        const [scopeSel, want] = spec.includes('::') ? spec.split('::') : ['', spec]
         const root = scopeSel ? document.querySelector(scopeSel) : document
         if (!root) return 'scope-not-found'
         const els = [...root.querySelectorAll('button')]
