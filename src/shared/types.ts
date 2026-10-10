@@ -108,12 +108,10 @@ export interface WeeklySummary {
 /** 搜索命中 */
 export interface SearchHit {
   date: string
-  /** 命中来源：`task` = 任务（默认，兼容旧调用）；`journal` = 日志条目 */
+  /** 命中来源：`task` = 任务（默认，兼容旧调用）；`journal` = 日志 */
   kind?: 'task' | 'journal'
   /** 任务 id；日志命中时为空串（保留字段以兼容既有调用方） */
   taskId: string
-  /** 日志条目 id（仅 kind === 'journal' 时有值） */
-  entryId?: string
   title: string
   snippet: string
 }
@@ -158,10 +156,10 @@ export interface TrashedTask {
   task: Task
 }
 
-/** 回收站中的单条日志条目（含其原属日期） */
-export interface TrashedJournalEntry {
+/** 回收站中的一天日志（含其原属日期） */
+export interface TrashedJournalDay {
   date: string
-  entry: JournalEntry
+  day: JournalDay
 }
 
 /**
@@ -176,7 +174,7 @@ export interface TrashItem {
   title: string
   deletedAt: string
   tasks: TrashedTask[]
-  journal?: TrashedJournalEntry
+  journal?: TrashedJournalDay
 }
 
 /** 导出 Markdown 的选项 */
@@ -239,36 +237,56 @@ export interface MountedTask {
   done: boolean           // 挂载当时的完成状态快照
 }
 
-/** 一条日志（同一天可有多条，按 `time` 排序） */
+/**
+ * 一条日志（**旧格式，仅用于向后兼容读取**）。
+ *
+ * 早期设计是「一天多条、每条带时间」，界面上表现为一叠卡片。
+ * 用户反馈这与想要的「像 Word 一样的连续文档」体验冲突，因此已改为
+ * **一天一篇**（见 `JournalDay`）。这里保留类型只为把旧数据**无损地**读出来合并成一页。
+ */
 export interface JournalEntry {
   id: string              // UUID
-  time: string            // HH:mm —— 一天内的展示与排序依据，可编辑
-  createdAt: string       // 创建时间 ISO
-  updatedAt: string       // 最后修改时间 ISO
-  body: string            // 富文本 HTML（TipTap 产出；**渲染前必须经 sanitizeHtml**）
-  attachments: AttachmentMeta[]  // 非图片附件（图片是内联在 body 里的 <img>）
-  mountedTasks: MountedTask[]    // 可选挂载的当天任务快照
-}
-
-/** 某一天的日志文件内容 —— `logs/journal/<年>/<日期>.json` */
-export interface JournalDay {
-  date: string            // YYYY-MM-DD
-  entries: JournalEntry[]
+  time: string            // HH:mm —— 旧格式里一天内的排序依据
+  createdAt: string
+  updatedAt: string
+  body: string
+  attachments: AttachmentMeta[]
+  mountedTasks: MountedTask[]
 }
 
 /**
- * 新建 / 更新日志条目的输入。
+ * 一天的日志 —— `logs/journal/<年>/<日期>.json`。
  *
- * 除 `id` 外全部可选：新建时由主进程补 `id`、`time`（缺省取当前时刻）、`createdAt`、`updatedAt`；
- * 更新已有条目时只传要改的字段，未传字段保持原值。
+ * **一天一篇连续文档**：整天的内容都在一个 `body` 里，像 Word 一样往下写，
+ * 不再分条目、不再有时间头。旧格式 `{ entries: [...] }` 会在读取时自动合并成本结构。
  */
-export interface JournalEntryInput {
-  id?: string
-  time?: string
+export interface JournalDay {
+  date: string                    // YYYY-MM-DD
+  body: string                    // 富文本 HTML（TipTap 产出；渲染前必须经 sanitizeHtml）
+  attachments: AttachmentMeta[]   // 非图片附件（图片是内联在 body 里的 <img>）
+  mountedTasks: MountedTask[]     // 可选挂载的当天任务快照
+  createdAt: string               // 首次写入时间 ISO
+  updatedAt: string               // 最后修改时间 ISO
+}
+
+/** 左栏「天列表」用的摘要（不倒出整篇正文，省流量也省渲染） */
+export interface JournalDaySummary {
+  date: string
+  /** 正文纯文本前若干字，用于列表里的内容预览 */
+  preview: string
+  updatedAt: string
+  /** 该天挂载的任务数（列表上给个小标记） */
+  mountedCount: number
+}
+
+/**
+ * 保存一天日志的输入。
+ * 全部可选：未传的字段保持原值（例如只改正文时不必回传附件列表）。
+ */
+export interface JournalDayInput {
   body?: string
   attachments?: AttachmentMeta[]
   mountedTasks?: MountedTask[]
-  createdAt?: string
 }
 
 // ==================== 数据层告警类型定义 ====================

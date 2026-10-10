@@ -3,8 +3,8 @@ import type {
   DataWarning,
   ExportOptions,
   JournalDay,
-  JournalEntry,
-  JournalEntryInput,
+  JournalDayInput,
+  JournalDaySummary,
   Meeting,
   MonthStats,
   NewTaskInput,
@@ -123,18 +123,17 @@ export interface WorkLogApi {
   ): Promise<StickyNote | null>
   deleteStickyNote(id: string): Promise<{ ok: boolean }>
 
-  // ---- 日志 ----
+  // ---- 日志（一天一篇连续文档）----
   listJournalDates(): Promise<string[]>
-  readJournalDay(date: string): Promise<JournalDay>
-  listJournalRange(opts: { before?: string; limit?: number }): Promise<JournalDay[]>
-  saveJournalEntry(
+  readJournalDay(date: string): Promise<JournalDay | null>
+  listJournalSummaries(opts: { before?: string; limit?: number }): Promise<JournalDaySummary[]>
+  saveJournalDay(
     date: string,
-    entry: JournalEntryInput
-  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
-  deleteJournalEntry(
-    date: string,
-    id: string
-  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
+    day: JournalDayInput
+  ): Promise<{ ok: boolean; day: JournalDay | null; error?: string }>
+  deleteJournalDay(
+    date: string
+  ): Promise<{ ok: boolean; day: JournalDay | null; error?: string }>
 
   // 系统信息 / 更新
   getAppInfo(): Promise<{

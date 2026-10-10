@@ -3,8 +3,8 @@ import type {
   AppSettings,
   ExportOptions,
   JournalDay,
-  JournalEntry,
-  JournalEntryInput,
+  JournalDayInput,
+  JournalDaySummary,
   Meeting,
   MonthStats,
   NewTaskInput,
@@ -77,18 +77,20 @@ export type WorkLogApi = {
   addStickyNote: (text: string) => Promise<StickyNote>
   updateStickyNote: (id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) => Promise<StickyNote | null>
   deleteStickyNote: (id: string) => Promise<{ ok: boolean }>
-  // ---- 日志 ----
+  // ---- 日志（一天一篇连续文档）----
   listJournalDates: () => Promise<string[]>
-  readJournalDay: (date: string) => Promise<JournalDay>
-  listJournalRange: (opts: { before?: string; limit?: number }) => Promise<JournalDay[]>
-  saveJournalEntry: (
+  readJournalDay: (date: string) => Promise<JournalDay | null>
+  listJournalSummaries: (opts: {
+    before?: string
+    limit?: number
+  }) => Promise<JournalDaySummary[]>
+  saveJournalDay: (
     date: string,
-    entry: JournalEntryInput
-  ) => Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
-  deleteJournalEntry: (
-    date: string,
-    id: string
-  ) => Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }>
+    day: JournalDayInput
+  ) => Promise<{ ok: boolean; day: JournalDay | null; error?: string }>
+  deleteJournalDay: (
+    date: string
+  ) => Promise<{ ok: boolean; day: JournalDay | null; error?: string }>
   getAppInfo: () => Promise<{ appVersion: string; electron: string; chrome: string; node: string; platform: string; arch: string; packaged: boolean }>
   checkUpdate: () => Promise<{ ok: boolean; message?: string }>
   downloadUpdate: () => Promise<{ ok: boolean; message?: string }>
@@ -259,20 +261,21 @@ const api: WorkLogApi = {
 
   // ---- 日志 ----
   listJournalDates: (): Promise<string[]> => ipcRenderer.invoke('journal:listDates'),
-  readJournalDay: (date: string): Promise<JournalDay> =>
+  readJournalDay: (date: string): Promise<JournalDay | null> =>
     ipcRenderer.invoke('journal:readDay', date),
-  listJournalRange: (opts: { before?: string; limit?: number }): Promise<JournalDay[]> =>
-    ipcRenderer.invoke('journal:listRange', opts),
-  saveJournalEntry: (
+  listJournalSummaries: (opts: {
+    before?: string
+    limit?: number
+  }): Promise<JournalDaySummary[]> => ipcRenderer.invoke('journal:listSummaries', opts),
+  saveJournalDay: (
     date: string,
-    entry: JournalEntryInput
-  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }> =>
-    ipcRenderer.invoke('journal:saveEntry', date, entry),
-  deleteJournalEntry: (
-    date: string,
-    id: string
-  ): Promise<{ ok: boolean; entry: JournalEntry | null; error?: string }> =>
-    ipcRenderer.invoke('journal:deleteEntry', date, id),
+    day: JournalDayInput
+  ): Promise<{ ok: boolean; day: JournalDay | null; error?: string }> =>
+    ipcRenderer.invoke('journal:saveDay', date, day),
+  deleteJournalDay: (
+    date: string
+  ): Promise<{ ok: boolean; day: JournalDay | null; error?: string }> =>
+    ipcRenderer.invoke('journal:deleteDay', date),
 
   // ---- 系统信息 / 自动更新 ----
   getAppInfo: (): Promise<{

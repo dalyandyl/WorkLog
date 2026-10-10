@@ -1,27 +1,29 @@
 import type {
   AttachmentMeta,
   JournalDay,
+  JournalDayInput,
+  JournalDaySummary,
   JournalEntry,
-  JournalEntryInput,
   MountedTask
 } from '../shared/types'
 import { readJson, writeJson, removeFile, withDataLock } from './jsonStore'
 import { journalDayPath, journalRoot, journalYearDir } from './paths'
 import { promises as fs } from 'fs'
 
-export type { JournalDay, JournalEntry, MountedTask }
+export type { JournalDay, JournalDayInput, JournalDaySummary, JournalEntry, MountedTask }
 export { journalDayPath, journalRoot, journalYearDir }
 
 /**
  * 日志数据层。
  *
- * 存储：`<root>/journal/<年>/<日期>.json`，一天一个文件，内容是 `{ date, entries: [...] }`。
- * 一天**可以有多条**条目（时间线式手记），按 `time`（HH:mm）升序排列。
+ * 存储：`<root>/journal/<年>/<日期>.json`，**一天一篇连续文档**
+ * （早期是「一天多条 entries[]」，界面上像一叠卡片；用户反馈与想要的 Word 式
+ * 连续书写体验冲突，故改为一天一篇。旧格式仍可读，见 `normalizeDay`）。
  *
  * 设计要点：
  *   - 全部读写走 `jsonStore`（原子写 + 损坏隔离 + 全局写锁），不自己碰 fs；
  *   - 「读-改-写」全程持锁（`withDataLock`），避免并发丢更新；
- *   - 条目清空时**删除文件**而不是留一个空壳（与 `weekly.ts` 的语义一致）；
+ *   - 整天为空时**删除文件**而不是留一个空壳（与 `weekly.ts` 语义一致）；
  *   - **日期必须校验**：`date` 来自渲染层并会参与拼接文件路径，
  *     不校验就可被 `../../` 之类穿越到数据目录之外（同 P3-2 的附件路径加固）。
  */
@@ -39,14 +41,14 @@ function assertDate(date: string): void {
   }
 }
 
-/** 时间字段规范化：接受 `HH:mm`；其它一律当作空串（排序时排在最前） */
-function normalizeTime(v: unknown): string {
-  if (typeof v !== 'string') return ''
-  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim())
-  if (!m) return ''
-  const h = Number(m[1])
-  if (h < 0 || h > 23) return ''
-  return `${String(h).padStart(2, '0')}:${m[2]}`
+/** 去掉 HTML 标签得到纯文本（列表预览与搜索共用） */
+export function toPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function normalizeAttachments(v: unknown): AttachmentMeta[] {
@@ -64,168 +66,153 @@ function normalizeAttachments(v: unknown): AttachmentMeta[] {
 
 function normalizeMountedTasks(v: unknown): MountedTask[] {
   if (!Array.isArray(v)) return []
-  return v
-    .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
-    .map((t) => ({
-      taskId: typeof t.taskId === 'string' ? t.taskId : '',
+  const out: MountedTask[] = []
+  const seen = new Set<string>()
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue
+    const t = raw as Record<string, unknown>
+    const taskId = typeof t.taskId === 'string' ? t.taskId : ''
+    if (!taskId || seen.has(taskId)) continue
+    seen.add(taskId)
+    out.push({
+      taskId,
       date: typeof t.date === 'string' ? t.date : '',
       title: typeof t.title === 'string' ? t.title : '',
       done: t.done === true
-    }))
-    .filter((t) => t.taskId !== '')
+    })
+  }
+  return out
 }
 
-function normalizeEntry(raw: unknown): JournalEntry | null {
+/**
+ * 把磁盘上的 JSON 规范化成 `JournalDay`。
+ *
+ * **向后兼容**：早期格式是 `{ date, entries: [{ time, body, … }] }`。
+ * 遇到 `entries` 就按时间顺序合并成一整篇；**多条**时在每条前保留一个时间小标题 ——
+ * 这样旧内容与它的时间信息都不会丢（用户当时可能已经写过东西）。
+ * 单条时不加标题，避免凭空多出一个时间行。
+ * 注意这里**只在读取时转换，不回写**：文件保持原样，直到用户真的保存那一天。
+ */
+function normalizeDay(date: string, raw: unknown): JournalDay | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
-  const id = typeof o.id === 'string' && o.id !== '' ? o.id : null
-  if (!id) return null
+
+  // ---- 旧格式：一天多条 ----
+  if (Array.isArray(o.entries)) {
+    const entries = o.entries
+      .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+      .map((e) => ({
+        time: typeof e.time === 'string' ? e.time : '',
+        body: typeof e.body === 'string' ? e.body : '',
+        createdAt: typeof e.createdAt === 'string' ? e.createdAt : '',
+        updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : '',
+        attachments: normalizeAttachments(e.attachments),
+        mountedTasks: normalizeMountedTasks(e.mountedTasks)
+      }))
+
+    const meaningful = entries.filter((e) => e.body.trim() !== '' || e.attachments.length > 0)
+    // 只有**多条**时才插入时间小标题：单条（最常见）保持干净，不凭空多出一个时间行
+    const withTime = meaningful.length > 1
+    const parts = meaningful.map((e) =>
+      withTime && e.time ? `<p><strong>${e.time}</strong></p>${e.body}` : e.body
+    )
+
+    return {
+      date,
+      body: parts.join(''),
+      attachments: entries.flatMap((e) => e.attachments),
+      mountedTasks: normalizeMountedTasks(entries.flatMap((e) => e.mountedTasks)),
+      createdAt: entries.map((e) => e.createdAt).filter(Boolean).sort()[0] ?? '',
+      updatedAt: entries.map((e) => e.updatedAt).filter(Boolean).sort().pop() ?? ''
+    }
+  }
+
+  // ---- 当前格式：一天一篇 ----
+  const body = typeof o.body === 'string' ? o.body : ''
+  const attachments = normalizeAttachments(o.attachments)
+  const mountedTasks = normalizeMountedTasks(o.mountedTasks)
+
   return {
-    id,
-    time: normalizeTime(o.time),
+    date,
+    body,
+    attachments,
+    mountedTasks,
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
-    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : '',
-    body: typeof o.body === 'string' ? o.body : '',
-    attachments: normalizeAttachments(o.attachments),
-    mountedTasks: normalizeMountedTasks(o.mountedTasks)
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : ''
   }
 }
 
-/** 一天之内的排序：先按 time（HH:mm 字典序即时间序），同刻按 createdAt 稳定 */
-function sortEntries(entries: JournalEntry[]): JournalEntry[] {
-  return entries.sort((a, b) => {
-    if (a.time !== b.time) return a.time < b.time ? -1 : 1
-    return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
-  })
+/** 该天是否算「写过」（有正文、附件或挂载任务） */
+function isDayEmpty(day: Pick<JournalDay, 'body' | 'attachments' | 'mountedTasks'>): boolean {
+  return toPlainText(day.body) === '' && day.attachments.length === 0 && day.mountedTasks.length === 0
 }
 
 /**
- * 读取某天的条目（已规范化 + 排序）。
- * 文件不存在或已损坏 → 返回空数组（损坏文件已由 jsonStore 隔离并告警），**不返回 null**。
+ * 读取某天的日志。
+ * 文件不存在或已损坏 → 返回 `null`（损坏文件已由 jsonStore 隔离并告警），界面据此显示空文档。
  */
-export async function readJournalEntries(root: string, date: string): Promise<JournalEntry[]> {
+export async function readJournalDay(root: string, date: string): Promise<JournalDay | null> {
   assertDate(date)
-  const data = await readJson<{ date?: string; entries?: unknown } | null>(
-    journalDayPath(root, date),
-    null
-  )
-  if (!data || !Array.isArray(data.entries)) return []
-  const entries = data.entries.map(normalizeEntry).filter((e): e is JournalEntry => e !== null)
-  return sortEntries(entries)
+  const raw = await readJson<unknown>(journalDayPath(root, date), null)
+  if (raw === null) return null
+  return normalizeDay(date, raw)
 }
 
-/** 读取整天（含日期回填，供渲染层直接用） */
-export async function readJournalDay(root: string, date: string): Promise<JournalDay> {
-  return { date, entries: await readJournalEntries(root, date) }
+/** 只取正文（左栏预览、搜索等不需要完整结构时用） */
+export async function readJournalBody(root: string, date: string): Promise<string> {
+  const day = await readJournalDay(root, date)
+  return day?.body ?? ''
 }
 
-/**
- * 「读-改-写」某天日志，全程持写锁。
- * `mutate` 返回空数组（或 null）时删除该天文件，避免留下空壳。
- */
-async function mutateDay(
+/** 保存一整天的日志（覆盖式）。整天为空则删除文件。 */
+export async function saveJournalDay(
   root: string,
   date: string,
-  mutate: (entries: JournalEntry[]) => JournalEntry[]
-): Promise<JournalEntry[]> {
+  input: JournalDayInput
+): Promise<JournalDay> {
   assertDate(date)
   const file = journalDayPath(root, date)
+  const now = new Date().toISOString()
+
   return withDataLock(async () => {
-    const data = await readJson<{ date?: string; entries?: unknown } | null>(file, null)
-    const current =
-      data && Array.isArray(data.entries)
-        ? data.entries.map(normalizeEntry).filter((e): e is JournalEntry => e !== null)
-        : []
-    const next = mutate(current)
-    if (next.length === 0) {
-      await removeFile(file)
-      return []
-    }
-    await writeJson(file, { date, entries: sortEntries(next) })
-    return next
-  })
-}
-
-/**
- * 新增或更新一条日志条目（按 id upsert）。
- *
- * 传 `time` 为空串时会自动填当前时间 —— 新建条目时渲染层不必自己取时间。
- * 返回写入后的完整条目（已规范化），失败时抛错由 IPC 层转换。
- */
-export async function saveJournalEntry(
-  root: string,
-  date: string,
-  input: JournalEntryInput
-): Promise<JournalEntry> {
-  assertDate(date)
-  const now = new Date()
-  const id =
-    typeof input.id === 'string' && input.id !== '' ? input.id : crypto.randomUUID()
-  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  const iso = now.toISOString()
-
-  let saved: JournalEntry | null = null
-  await mutateDay(root, date, (current) => {
-    const idx = current.findIndex((e) => e.id === id)
-    const prev = idx >= 0 ? current[idx] : null
-    const entry: JournalEntry = {
-      id,
-      time: normalizeTime(input.time) || prev?.time || hhmm,
-      createdAt: prev?.createdAt || input.createdAt || iso,
-      updatedAt: iso,
+    const prev = normalizeDay(date, await readJson<unknown>(file, null))
+    const next: JournalDay = {
+      date,
       body: typeof input.body === 'string' ? input.body : (prev?.body ?? ''),
       attachments: input.attachments
         ? normalizeAttachments(input.attachments)
         : (prev?.attachments ?? []),
       mountedTasks: input.mountedTasks
         ? normalizeMountedTasks(input.mountedTasks)
-        : (prev?.mountedTasks ?? [])
+        : (prev?.mountedTasks ?? []),
+      createdAt: prev?.createdAt || now,
+      updatedAt: now
     }
-    saved = entry
-    if (idx >= 0) {
-      const next = current.slice()
-      next[idx] = entry
+
+    if (isDayEmpty(next)) {
+      await removeFile(file)
       return next
     }
-    return [...current, entry]
+    await writeJson(file, next)
+    return next
   })
-
-  if (!saved) throw new Error('保存日志条目失败')
-  return saved
 }
 
 /**
- * 删除一条日志条目，返回被删掉的条目（供回收站快照）。
- * 条目不存在时返回 null（幂等，不报错）。
+ * 删除某天的日志，返回被删掉的内容（供回收站快照）。
+ * 该天不存在时返回 null（幂等，不报错）。
  */
-export async function deleteJournalEntry(
-  root: string,
-  date: string,
-  id: string
-): Promise<JournalEntry | null> {
+export async function deleteJournalDay(root: string, date: string): Promise<JournalDay | null> {
   assertDate(date)
-  let removed: JournalEntry | null = null
-  await mutateDay(root, date, (current) => {
-    const hit = current.find((e) => e.id === id)
-    if (!hit) return current
-    removed = hit
-    return current.filter((e) => e.id !== id)
+  const file = journalDayPath(root, date)
+  return withDataLock(async () => {
+    const prev = normalizeDay(date, await readJson<unknown>(file, null))
+    await removeFile(file)
+    return prev && !isDayEmpty(prev) ? prev : null
   })
-  return removed
 }
 
-/** 该天是否存在日志（用于日历打点，避免把整天的正文读出来） */
-export async function hasJournal(root: string, date: string): Promise<boolean> {
-  if (!isValidJournalDate(date)) return false
-  try {
-    const st = await fs.stat(journalDayPath(root, date))
-    return st.isFile() && st.size > 2
-  } catch {
-    return false
-  }
-}
-
-/** 列出所有有日志的日期（升序） */
+/** 列出所有有日志的日期（升序）。空文件与纯空白的「空文档」不算。 */
 export async function listJournalDates(root: string): Promise<string[]> {
   const dates: string[] = []
   try {
@@ -250,26 +237,35 @@ export async function listJournalDates(root: string): Promise<string[]> {
   return dates
 }
 
+/** 预览文本长度上限（左栏列表一行放不下更多） */
+const PREVIEW_LEN = 70
+
 /**
- * 连续时间线模式：取 `limit` 天（按日期倒序，即从 `before` 往前翻）的日志。
+ * 左栏「天列表」用的摘要，**按日期倒序**（最近的在最上面），支持向前翻页。
  *
- * 一天一个文件，所以按天分批读即可；这里跳过没有条目的天，
- * 保证返回的每一天都有实际内容（前端不必再过滤空天）。
+ * 一天一个文件，所以从最新的日期往回读即可；跳过实际为空的文档，
+ * 保证返回的每一天都有内容（前端不必再过滤）。
  */
-export async function listJournalRange(
+export async function listJournalSummaries(
   root: string,
   opts: { before?: string; limit?: number } = {}
-): Promise<JournalDay[]> {
-  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 200)
+): Promise<JournalDaySummary[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 30, 1), 200)
   const all = await listJournalDates(root)
-  const pool = opts.before && isValidJournalDate(opts.before)
-    ? all.filter((d) => d < opts.before!)
-    : all
+  const pool =
+    opts.before && isValidJournalDate(opts.before) ? all.filter((d) => d < opts.before!) : all
 
-  const out: JournalDay[] = []
+  const out: JournalDaySummary[] = []
   for (let i = pool.length - 1; i >= 0 && out.length < limit; i--) {
-    const entries = await readJournalEntries(root, pool[i])
-    if (entries.length > 0) out.push({ date: pool[i], entries })
+    const day = await readJournalDay(root, pool[i])
+    if (!day || isDayEmpty(day)) continue
+    const plain = toPlainText(day.body)
+    out.push({
+      date: pool[i],
+      preview: plain.length > PREVIEW_LEN ? plain.slice(0, PREVIEW_LEN) + '…' : plain,
+      updatedAt: day.updatedAt,
+      mountedCount: day.mountedTasks.length
+    })
   }
   return out
 }

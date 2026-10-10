@@ -6108,134 +6108,301 @@ input[type='radio']:focus-visible {
 }
 
 /* ==========================================================================
-   日志（journal）—— 时间线式个人手记
+   日志（journal）—— 一天一篇的连续文档
    与「任务」是两个独立的域：这里只负责记录，不参与待办统计。
    颜色一律走 CSS 变量（见文件顶部 :root），不要写死色值。
+
+   布局：左栏可滚动的「天列表」+ 右栏一整张纸（居中定宽）。
+   右栏里的编辑器是**共用的 RichTextEditor**，所以所有"纸张化"的样式都必须在
+   `.journal-doc` 作用域下覆盖，绝不能改 `.editor-wrapper` / `.rich-editor-content`
+   的全局规则（那会同时改掉会议纪要的观感）。
    ========================================================================== */
 
 .journal-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* ---------------- 左栏：天列表 ---------------- */
+
+.journal-days {
+  width: 236px;
+  flex: 0 0 236px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 22px 40px;
-  overflow-y: auto;
-  height: 100%;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.journal-toolbar {
+.journal-days-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 14px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.journal-tabs {
-  display: flex;
-  gap: 8px;
-}
-
-.journal-tabs .tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.journal-toolbar-spacer,
-.journal-entry-spacer {
-  flex: 1 1 auto;
-}
-
-.journal-loading,
-.journal-empty,
-.journal-pick-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 42px 16px;
-  color: var(--muted);
-  font-size: 13.5px;
-}
-
-.journal-empty p {
-  margin: 0;
-}
-
-/* ---- 一天的分组（时间线模式） ---- */
-
-.journal-day-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.journal-day-title {
-  margin: 6px 0 0;
+.journal-days-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
-/* ---- 单条日志 ---- */
-
-.journal-entry {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 14px 16px;
-}
-
-.journal-entry-head,
-.journal-composer-head {
+.journal-days-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.journal-entry-time {
-  display: inline-flex;
+.journal-days-hint {
+  padding: 18px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.7;
+  text-align: center;
+}
+
+.journal-day {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  padding: 9px 11px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.journal-day:hover {
+  background: var(--accent-soft);
+}
+
+.journal-day.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+.journal-day-date {
+  display: flex;
   align-items: center;
   gap: 5px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 2px 10px;
+  color: var(--text);
 }
 
-/* ---- 挂载的任务（快照行） ---- */
+.journal-day.active .journal-day-date {
+  color: var(--accent);
+}
+
+.journal-day-link {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+/* 内容预览：一行，超出省略 —— 让列表保持整齐、可快速扫读 */
+.journal-day-preview {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-day-more {
+  margin: 8px 4px 4px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.journal-day-more:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-ring);
+}
+
+.journal-day-more:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* ---------------- 右栏：一张纸 ---------------- */
+
+.journal-doc {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 26px 28px 60px;
+}
+
+/* 纸张本体：居中定宽 + 轻阴影，营造「一页文档」的观感 */
+.journal-doc-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 30px 40px 48px;
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.journal-doc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.journal-doc-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.journal-doc-title h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.journal-doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.journal-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.journal-doc-loading {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 自动保存时的转圈 */
+.spin {
+  animation: journal-spin 0.9s linear infinite;
+}
+
+@keyframes journal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------- 纸张化：覆盖共用编辑器的盒子感 ---------------- */
+
+/* 去掉灰边框盒子，让内容直接落在纸上 */
+.journal-doc .editor-wrapper {
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  flex: 1;
+}
+
+/* 工具条改成低对比的一条：贴在纸张顶部，滚动时保持可用 */
+.journal-doc .editor-toolbar {
+  position: sticky;
+  top: -30px;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+  margin-bottom: 10px;
+}
+
+/* 正文排版：更大的字号与行距，接近写作软件的手感 */
+.journal-doc .rich-editor-content {
+  min-height: 52vh;
+  padding: 0;
+  font-size: 15.5px;
+  line-height: 1.95;
+}
+
+.journal-doc .rich-editor-content p {
+  margin: 12px 0;
+}
+
+.journal-doc .editor-wrapper:focus-within {
+  border-color: transparent;
+}
+
+/* 附件工具条也去盒子化 */
+.journal-doc .meeting-attach-bar {
+  padding-left: 0;
+}
+
+/* ---------------- 关联任务（快照行） ---------------- */
 
 .journal-mounted {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 
 .journal-mounted-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 4px;
+  padding: 3px 6px 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg);
-  color: var(--text);
   font-size: 12.5px;
-  cursor: pointer;
   max-width: 100%;
 }
 
-.journal-mounted-item:hover {
-  border-color: var(--accent-ring);
+.mounted-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12.5px;
+  max-width: 100%;
 }
 
-.journal-mounted-item .mounted-title {
+.mounted-jump:hover .mounted-title {
+  color: var(--accent);
+}
+
+.journal-mounted-item .mounted-title,
+.journal-pick-item .mounted-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6250,77 +6417,7 @@ input[type='radio']:focus-visible {
   color: var(--muted);
 }
 
-/* ---- 附件 ---- */
-
-.journal-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.journal-attach-item {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 3px 9px;
-  font-size: 12.5px;
-  cursor: pointer;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.journal-attach-item:hover {
-  border-color: var(--accent-ring);
-}
-
-/* ---- 编辑草稿区 ---- */
-
-.journal-composer {
-  background: var(--panel);
-  border: 1px solid var(--accent-ring);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 14px 16px;
-}
-
-.journal-time-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.journal-time-input {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  padding: 3px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-
-.journal-composer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-/* ---- 加载更早 ---- */
-
-.journal-load-more {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 4px;
-}
-
-/* ---- 挂载任务选择器 ---- */
+/* ---------------- 关联任务选择器 ---------------- */
 
 .journal-pick-list {
   display: flex;
@@ -6344,9 +6441,16 @@ input[type='radio']:focus-visible {
   background: var(--accent-soft);
 }
 
-.journal-pick-item .mounted-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.journal-pick-empty {
+  padding: 22px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
 }
 
+.journal-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}

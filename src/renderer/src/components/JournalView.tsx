@@ -1,200 +1,223 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
-import { Clock, Link2, List, PenLine, Plus, Save, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, Link2, Loader2, Plus, Trash2, X } from 'lucide-react'
 import type {
   AttachmentMeta,
   JournalDay,
-  JournalEntry,
-  JournalEntryInput,
+  JournalDaySummary,
   MountedTask,
   StatusReporter,
   Task
 } from '../types'
 import RichTextEditor from './RichTextEditor'
-import RichView from './RichView'
 import Modal from './Modal'
+import { weekdayOf } from '../utils/date'
 
 interface JournalViewProps {
-  /** 当前选中的日期（按天模式用；与左侧日历联动） */
+  /** 当前选中的日期（与左侧日历 / 搜索跳转联动） */
   date: string
   onStatus?: StatusReporter
-  /** 数据版本号：变化时重新加载（例如从回收站恢复后） */
   dataVersion?: number
-  /** 点击挂载任务行时跳转到该任务 */
+  /** 切换日期时通知外层（日历、其他页跟着走） */
+  onDateChange?: (date: string) => void
+  /** 点击「关联任务」跳转到该任务 */
   onOpenTask?: (date: string, taskId: string) => void
 }
 
-/** 时间线模式一次加载的天数 */
-const TIMELINE_PAGE = 20
+/** 左栏一页取多少天 */
+const PAGE = 30
+/** 停止输入多久后落盘（Word/备忘录那种「不用点保存」的观感） */
+const AUTOSAVE_MS = 700
 
-/** 一条正在编辑的草稿 */
-interface Draft {
-  /** null = 新建 */
-  id: string | null
-  time: string
-  body: string
-  attachments: AttachmentMeta[]
-  mountedTasks: MountedTask[]
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function nowHHmm(): string {
-  const d = new Date()
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function emptyDraft(): Draft {
-  return { id: null, time: nowHHmm(), body: '', attachments: [], mountedTasks: [] }
-}
-
-function draftFromEntry(e: JournalEntry): Draft {
-  return {
-    id: e.id,
-    time: e.time || nowHHmm(),
-    body: e.body,
-    attachments: [...e.attachments],
-    mountedTasks: [...e.mountedTasks]
-  }
+/** `2026-10-10` → `10月10日 周五`（当年不显示年份，避免列表噪音） */
+function formatDayLabel(date: string): string {
+  const [y, m, d] = date.split('-')
+  const thisYear = String(new Date().getFullYear())
+  const md = `${Number(m)}月${Number(d)}日`
+  return y === thisYear ? `${md} ${weekdayOf(date)}` : `${y}年${md}`
 }
 
 /**
- * 日志页面。
+ * 日志页面（一天一篇连续文档）。
  *
- * - **默认按天**：跟随左侧日历选中的日期，列出当天的条目（按时间升序）。
- * - **时间线**：连续跨天倒序浏览，可继续「加载更早」。
- * - 每条条目可**行内编辑**（新建也是同一套草稿区），可挂载当天的任务（一行快照）。
+ * 布局仿照 Word / 备忘录这类写作工具：
+ *   - **左栏**：可滚动的「天列表」，只列写过的天，倒序 + 内容预览，滚到底加载更早；
+ *   - **右栏**：一整张纸，居中定宽，内容一直往下写，**不需要点保存**（停止输入后自动落盘）。
  *
- * 与任务模块**相互独立**：这里不修改任何任务数据，挂载只读取任务快照。
+ * 与任务模块相互独立：这里只读取任务快照用于「关联任务」，从不修改任务数据。
  */
 export default function JournalView({
   date,
   onStatus,
   dataVersion,
+  onDateChange,
   onOpenTask
 }: JournalViewProps): React.JSX.Element {
-  const [viewMode, setViewMode] = useState<'day' | 'timeline'>('day')
-  const [entries, setEntries] = useState<JournalEntry[]>([])
-  const [timeline, setTimeline] = useState<JournalDay[]>([])
-  const [loading, setLoading] = useState(false)
+  const [summaries, setSummaries] = useState<JournalDaySummary[]>([])
+  const [listLoading, setListLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [exhausted, setExhausted] = useState(false)
+
+  const [day, setDay] = useState<JournalDay | null>(null)
+  const [docLoading, setDocLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string>('')
+
   const [pickOpen, setPickOpen] = useState(false)
   const [dayTasks, setDayTasks] = useState<Task[]>([])
-  const editorRef = useRef<Editor | null>(null)
-  // 保存进行中时禁用按钮，避免重复提交
-  const savingRef = useRef(false)
 
-  // ---- 加载：按天 ----
-  const loadDay = useCallback(
-    async (d: string): Promise<void> => {
-      setLoading(true)
+  const editorRef = useRef<Editor | null>(null)
+  /** 编辑器最新的 HTML（onChange 写入；保存时以它为准） */
+  const bodyRef = useRef('')
+  /** 是否有未落盘的改动 */
+  const dirtyRef = useRef(false)
+  const timerRef = useRef<number | null>(null)
+  /** 已加载文档对应的日期，防止异步竞态把 A 天的内容写到 B 天 */
+  const loadedDateRef = useRef<string>('')
+
+  // ---------- 左栏：天列表 ----------
+  const loadSummaries = useCallback(
+    async (opts: { before?: string; append?: boolean } = {}): Promise<void> => {
+      if (opts.append) setLoadingMore(true)
+      else setListLoading(true)
       try {
-        const day = await window.api.readJournalDay(d)
-        setEntries(day.entries)
+        const list = await window.api.listJournalSummaries({ before: opts.before, limit: PAGE })
+        setSummaries((prev) => (opts.append ? [...prev, ...list] : list))
+        setExhausted(list.length < PAGE)
       } catch (err) {
-        console.error('readJournalDay failed:', err)
-        onStatus?.('读取日志失败', 'error')
-        setEntries([])
+        console.error('listJournalSummaries failed:', err)
+        onStatus?.('读取日志列表失败', 'error')
       } finally {
-        setLoading(false)
+        setListLoading(false)
+        setLoadingMore(false)
       }
     },
     [onStatus]
   )
 
-  // ---- 加载：时间线（首屏） ----
-  const loadTimeline = useCallback(async (): Promise<void> => {
-    setLoading(true)
+  useEffect(() => {
+    void loadSummaries()
+  }, [loadSummaries, dataVersion])
+
+  async function loadMore(): Promise<void> {
+    const oldest = summaries[summaries.length - 1]?.date
+    if (!oldest || loadingMore) return
+    await loadSummaries({ before: oldest, append: true })
+  }
+
+  // ---------- 右栏：当天文档 ----------
+  const loadDay = useCallback(
+    async (d: string): Promise<void> => {
+      setDocLoading(true)
+      try {
+        const data = await window.api.readJournalDay(d)
+        loadedDateRef.current = d
+        bodyRef.current = data?.body ?? ''
+        dirtyRef.current = false
+        setSavedAt(data?.updatedAt ?? '')
+        setDay(
+          data ?? {
+            date: d,
+            body: '',
+            attachments: [],
+            mountedTasks: [],
+            createdAt: '',
+            updatedAt: ''
+          }
+        )
+      } catch (err) {
+        console.error('readJournalDay failed:', err)
+        onStatus?.('读取日志失败', 'error')
+        setDay(null)
+      } finally {
+        setDocLoading(false)
+      }
+    },
+    [onStatus]
+  )
+
+  useEffect(() => {
+    void loadDay(date)
+  }, [date, dataVersion, loadDay])
+
+  // ---------- 自动保存 ----------
+  /** 把当前内容写盘。返回是否真的写了。 */
+  const flush = useCallback(async (): Promise<boolean> => {
+    if (!dirtyRef.current) return false
+    const target = loadedDateRef.current
+    if (!target || !day) return false
+    dirtyRef.current = false
+    setSaving(true)
     try {
-      setTimeline(await window.api.listJournalRange({ limit: TIMELINE_PAGE }))
+      const body = editorRef.current ? editorRef.current.getHTML() : bodyRef.current
+      const r = await window.api.saveJournalDay(target, {
+        body,
+        attachments: day.attachments,
+        mountedTasks: day.mountedTasks
+      })
+      if (!r.ok) {
+        dirtyRef.current = true
+        onStatus?.('保存失败：' + (r.error ?? '未知错误'), 'error')
+        return false
+      }
+      if (r.day) setSavedAt(r.day.updatedAt)
+      return true
     } catch (err) {
-      console.error('listJournalRange failed:', err)
-      onStatus?.('读取日志失败', 'error')
-      setTimeline([])
+      console.error('saveJournalDay failed:', err)
+      dirtyRef.current = true
+      onStatus?.('保存失败', 'error')
+      return false
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
-  }, [onStatus])
+  }, [day, onStatus])
 
-  useEffect(() => {
-    if (viewMode === 'day') void loadDay(date)
-    else void loadTimeline()
-  }, [viewMode, date, dataVersion, loadDay, loadTimeline])
+  /** 排一次防抖保存 */
+  const scheduleSave = useCallback((): void => {
+    dirtyRef.current = true
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      void flush().then((wrote) => {
+        // 保存后刷新左栏预览（新的一天会因此出现在列表里）
+        if (wrote) void loadSummaries()
+      })
+    }, AUTOSAVE_MS)
+  }, [flush, loadSummaries])
 
-  // 切换日期/视图时丢弃未保存的草稿，避免写到错误的日期上
+  // 卸载 / 切页时把未落盘的改动 flush 掉（视图是条件渲染，会被卸载）
   useEffect(() => {
-    setDraft(null)
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+      // 这里不能 await；flush 内部自身是幂等且带错误处理的
+      void flush()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 切换日期前先保存上一天，避免内容写到错误的日期
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) void flush()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date])
 
-  /** 时间线追加更早的内容 */
-  async function loadMore(): Promise<void> {
-    const oldest = timeline[timeline.length - 1]?.date
-    if (!oldest) return
-    setLoadingMore(true)
-    try {
-      const more = await window.api.listJournalRange({ before: oldest, limit: TIMELINE_PAGE })
-      setTimeline((prev) => [...prev, ...more])
-    } catch (err) {
-      console.error('listJournalRange(before) failed:', err)
-      onStatus?.('加载更早的日志失败', 'error')
-    } finally {
-      setLoadingMore(false)
-    }
+  // ---------- 内容与挂载 ----------
+  function onBodyChange(html: string): void {
+    bodyRef.current = html
+    scheduleSave()
   }
 
-  // ---- 保存 / 删除 ----
-  async function saveDraft(): Promise<void> {
-    if (!draft || savingRef.current) return
-    const body = editorRef.current ? editorRef.current.getHTML() : draft.body
-    // TipTap 的空段落不算内容
-    const isEmpty = body.replace(/<[^>]*>/g, '').trim() === '' && draft.mountedTasks.length === 0
-    if (isEmpty) {
-      onStatus?.('日志内容为空，没有保存', 'error')
-      return
-    }
-    savingRef.current = true
-    try {
-      const input: JournalEntryInput = {
-        id: draft.id ?? undefined,
-        time: draft.time,
-        body,
-        attachments: draft.attachments,
-        mountedTasks: draft.mountedTasks
-      }
-      const r = await window.api.saveJournalEntry(date, input)
-      if (!r.ok) {
-        onStatus?.('保存失败：' + (r.error ?? '未知错误'), 'error')
-        return
-      }
-      setDraft(null)
-      onStatus?.(draft.id ? '日志已更新' : '日志已保存', 'success')
-      if (viewMode === 'day') await loadDay(date)
-      else await loadTimeline()
-    } catch (err) {
-      console.error('saveJournalEntry failed:', err)
-      onStatus?.('保存失败', 'error')
-    } finally {
-      savingRef.current = false
-    }
+  function patchDay(patch: Partial<JournalDay>): void {
+    setDay((prev) => (prev ? { ...prev, ...patch } : prev))
+    scheduleSave()
   }
 
-  async function deleteEntry(entry: JournalEntry): Promise<void> {
-    if (!window.confirm('确定删除这条日志？会先移入回收站，可以恢复。')) return
-    try {
-      const r = await window.api.deleteJournalEntry(date, entry.id)
-      if (!r.ok) {
-        onStatus?.('删除失败：' + (r.error ?? '未知错误'), 'error')
-        return
-      }
-      onStatus?.('日志已移入回收站', 'success')
-      if (viewMode === 'day') await loadDay(date)
-      else await loadTimeline()
-    } catch (err) {
-      console.error('deleteJournalEntry failed:', err)
-      onStatus?.('删除失败', 'error')
-    }
-  }
-
-  // ---- 挂载任务 ----
   async function openTaskPicker(): Promise<void> {
     try {
       setDayTasks(await window.api.readTasks(date))
@@ -206,18 +229,16 @@ export default function JournalView({
   }
 
   function toggleMount(t: Task): void {
-    if (!draft) return
-    const exists = draft.mountedTasks.some((m) => m.taskId === t.id)
-    setDraft({
-      ...draft,
-      mountedTasks: exists
-        ? draft.mountedTasks.filter((m) => m.taskId !== t.id)
-        : // 只存快照：标题 + 完成状态（不抄正文）
-          [...draft.mountedTasks, { taskId: t.id, date, title: t.title, done: t.done }]
-    })
+    if (!day) return
+    const exists = day.mountedTasks.some((m) => m.taskId === t.id)
+    const next: MountedTask[] = exists
+      ? day.mountedTasks.filter((m) => m.taskId !== t.id)
+      : // 只存快照：标题 + 完成状态（不抄正文）
+        [...day.mountedTasks, { taskId: t.id, date, title: t.title, done: t.done }]
+    patchDay({ mountedTasks: next })
   }
 
-  /** 点击挂载行 → 先确认任务仍在，再跳转（任务已删除则只提示、保留文字） */
+  /** 点击关联任务 → 先确认任务仍在，再跳转（任务已删则只提示、文字保留） */
   async function openMounted(m: MountedTask): Promise<void> {
     try {
       const tasks = await window.api.readTasks(m.date)
@@ -232,219 +253,185 @@ export default function JournalView({
     }
   }
 
-  // ---- 渲染 ----
-  function renderEntry(e: JournalEntry): React.JSX.Element {
-    const editing = draft?.id === e.id
-    if (editing && draft) return <div key={e.id}>{renderComposer(draft)}</div>
-    return (
-      <article key={e.id} className="journal-entry">
-        <header className="journal-entry-head">
-          <span className="journal-entry-time">
-            <Clock size={13} /> {e.time || '--:--'}
-          </span>
-          <span className="journal-entry-spacer" />
-          <button
-            className="icon-btn"
-            title="编辑"
-            aria-label="编辑这条日志"
-            onClick={() => setDraft(draftFromEntry(e))}
-          >
-            <PenLine size={15} />
-          </button>
-          <button
-            className="icon-btn danger"
-            title="删除"
-            aria-label="删除这条日志"
-            onClick={() => void deleteEntry(e)}
-          >
-            <Trash2 size={15} />
-          </button>
-        </header>
-
-        {e.mountedTasks.length > 0 && (
-          <div className="journal-mounted">
-            {e.mountedTasks.map((m) => (
-              <button
-                key={m.taskId}
-                className="journal-mounted-item"
-                title="跳转到该任务"
-                onClick={() => void openMounted(m)}
-              >
-                <span className={m.done ? 'mounted-done' : 'mounted-todo'}>
-                  {m.done ? '☑' : '☐'}
-                </span>
-                <span className="mounted-title">{m.title}</span>
-                <Link2 size={12} />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <RichView content={e.body} kind="html" />
-
-        {e.attachments.length > 0 && (
-          <div className="journal-attachments">
-            {e.attachments.map((a) => (
-              <button
-                key={a.id}
-                className="journal-attach-item"
-                onClick={() => void window.api.openAttachment(a.url)}
-              >
-                📎 {a.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </article>
-    )
+  async function deleteDay(): Promise<void> {
+    if (!window.confirm(`确定删除 ${formatDayLabel(date)} 的日志？会先移入回收站，可以恢复。`)) return
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    dirtyRef.current = false
+    try {
+      const r = await window.api.deleteJournalDay(date)
+      if (!r.ok) {
+        onStatus?.('删除失败：' + (r.error ?? '未知错误'), 'error')
+        return
+      }
+      onStatus?.('日志已移入回收站', 'success')
+      await loadDay(date)
+      await loadSummaries()
+    } catch (err) {
+      console.error('deleteJournalDay failed:', err)
+      onStatus?.('删除失败', 'error')
+    }
   }
 
-  function renderComposer(d: Draft): React.JSX.Element {
-    return (
-      <section className="journal-composer">
-        <div className="journal-composer-head">
-          <label className="journal-time-label">
-            时间
-            <input
-              type="time"
-              className="journal-time-input"
-              value={d.time}
-              onChange={(ev) => setDraft({ ...d, time: ev.target.value })}
-            />
-          </label>
-          <span className="journal-entry-spacer" />
-          <button className="md-mini-btn" onClick={() => void openTaskPicker()}>
-            <Link2 size={14} /> 挂载任务
-          </button>
-        </div>
-
-        {d.mountedTasks.length > 0 && (
-          <div className="journal-mounted">
-            {d.mountedTasks.map((m) => (
-              <span key={m.taskId} className="journal-mounted-item">
-                <span className={m.done ? 'mounted-done' : 'mounted-todo'}>
-                  {m.done ? '☑' : '☐'}
-                </span>
-                <span className="mounted-title">{m.title}</span>
-                <button
-                  className="icon-btn danger"
-                  title="取消挂载"
-                  aria-label="取消挂载"
-                  onClick={() =>
-                    setDraft({ ...d, mountedTasks: d.mountedTasks.filter((x) => x.taskId !== m.taskId) })
-                  }
-                >
-                  <X size={13} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* 用 key 让切换条目时重建编辑器（initialHtml 只在挂载时生效） */}
-        <RichTextEditor
-          key={d.id ?? 'new'}
-          initialHtml={d.body}
-          attachFolder={`journal/${date}`}
-          attachments={d.attachments}
-          onAttachmentsChange={(next) => setDraft({ ...d, attachments: next })}
-          editorRef={editorRef}
-          onStatus={onStatus}
-        />
-
-        <div className="journal-composer-actions">
-          <button className="action-btn cancel-btn" onClick={() => setDraft(null)}>
-            取消
-          </button>
-          <button className="action-btn save-btn" onClick={() => void saveDraft()}>
-            <Save size={14} /> 保存
-          </button>
-        </div>
-      </section>
-    )
+  async function saveNow(): Promise<void> {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    const wrote = await flush()
+    if (wrote) {
+      await loadSummaries()
+      onStatus?.('已保存', 'success')
+    }
   }
+
+  function pickDate(d: string): void {
+    if (d === date) return
+    onDateChange?.(d)
+  }
+
+  const today = toDateStr(new Date())
+  const isEmptyDoc = !!day && day.body.replace(/<[^>]*>/g, '').trim() === '' && day.attachments.length === 0
 
   return (
     <div className="journal-view">
-      <div className="journal-toolbar">
-        <div className="journal-tabs" role="tablist" aria-label="日志浏览方式">
+      {/* ---------------- 左栏：天列表 ---------------- */}
+      <aside className="journal-days" aria-label="日志日期列表">
+        <div className="journal-days-head">
+          <span className="journal-days-title">日志</span>
           <button
-            role="tab"
-            aria-selected={viewMode === 'day'}
-            className={viewMode === 'day' ? 'tab-btn active' : 'tab-btn'}
-            onClick={() => setViewMode('day')}
+            className="icon-btn"
+            title="写今天"
+            aria-label="写今天"
+            onClick={() => pickDate(today)}
           >
-            <PenLine size={14} /> 按天
-          </button>
-          <button
-            role="tab"
-            aria-selected={viewMode === 'timeline'}
-            className={viewMode === 'timeline' ? 'tab-btn active' : 'tab-btn'}
-            onClick={() => setViewMode('timeline')}
-          >
-            <List size={14} /> 时间线
+            <Plus size={16} />
           </button>
         </div>
-        <span className="journal-toolbar-spacer" />
-        {viewMode === 'day' && (
-          <button className="action-btn save-btn" onClick={() => setDraft(emptyDraft())}>
-            <Plus size={14} /> 写一条
-          </button>
-        )}
-      </div>
 
-      {loading && <div className="journal-loading">加载中…</div>}
-
-      {viewMode === 'day' ? (
-        <>
-          {!loading && entries.length === 0 && !draft && (
-            <div className="journal-empty">
-              <Sparkles size={18} />
-              <p>{date} 还没有日志</p>
-              <button className="action-btn save-btn" onClick={() => setDraft(emptyDraft())}>
-                <Plus size={14} /> 写第一条
-              </button>
-            </div>
+        <div className="journal-days-list">
+          {listLoading && <div className="journal-days-hint">加载中…</div>}
+          {!listLoading && summaries.length === 0 && (
+            <div className="journal-days-hint">还没有日志，直接在右侧开始写吧</div>
           )}
-          {draft && draft.id === null && renderComposer(draft)}
-          {entries.map((e) => renderEntry(e))}
-        </>
-      ) : (
-        <>
-          {timeline.map((day) => (
-            <section key={day.date} className="journal-day-group">
-              <h3 className="journal-day-title">{day.date}</h3>
-              {day.entries.map((e) => renderEntry(e))}
-            </section>
+          {summaries.map((s) => (
+            <button
+              key={s.date}
+              className={s.date === date ? 'journal-day active' : 'journal-day'}
+              aria-current={s.date === date ? 'true' : undefined}
+              onClick={() => pickDate(s.date)}
+            >
+              <span className="journal-day-date">
+                {formatDayLabel(s.date)}
+                {s.mountedCount > 0 && <Link2 size={11} className="journal-day-link" />}
+              </span>
+              <span className="journal-day-preview">{s.preview || '（空白）'}</span>
+            </button>
           ))}
-          {!loading && timeline.length === 0 && (
-            <div className="journal-empty">
-              <Sparkles size={18} />
-              <p>还没有任何日志</p>
-            </div>
+          {summaries.length > 0 && !exhausted && (
+            <button className="journal-day-more" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? '加载中…' : '加载更早'}
+            </button>
           )}
-          {timeline.length > 0 && (
-            <div className="journal-load-more">
-              <button className="md-mini-btn" disabled={loadingMore} onClick={() => void loadMore()}>
-                {loadingMore ? '加载中…' : '加载更早的日志'}
+        </div>
+      </aside>
+
+      {/* ---------------- 右栏：当天文档 ---------------- */}
+      <main className="journal-doc">
+        <div className="journal-doc-inner">
+          <header className="journal-doc-head">
+            <div className="journal-doc-title">
+              <h2>{formatDayLabel(date)}</h2>
+              <span className="journal-doc-status">
+                {saving ? (
+                  <>
+                    <Loader2 size={12} className="spin" /> 保存中…
+                  </>
+                ) : savedAt ? (
+                  <>
+                    <Check size={12} /> 已自动保存
+                  </>
+                ) : (
+                  '未保存'
+                )}
+              </span>
+            </div>
+            <div className="journal-doc-actions">
+              <button className="md-mini-btn" onClick={() => void openTaskPicker()}>
+                <Link2 size={14} /> 关联任务
               </button>
+              <button className="md-mini-btn" onClick={() => void saveNow()}>
+                保存
+              </button>
+              {!isEmptyDoc && (
+                <button
+                  className="icon-btn danger"
+                  title="删除这天的日志"
+                  aria-label="删除这天的日志"
+                  onClick={() => void deleteDay()}
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* 关联任务（快照行，不影响正文的连贯性） */}
+          {day && day.mountedTasks.length > 0 && (
+            <div className="journal-mounted">
+              {day.mountedTasks.map((m) => (
+                <span key={m.taskId} className="journal-mounted-item">
+                  <button className="mounted-jump" onClick={() => void openMounted(m)}>
+                    <span className={m.done ? 'mounted-done' : 'mounted-todo'}>
+                      {m.done ? '☑' : '☐'}
+                    </span>
+                    <span className="mounted-title">{m.title}</span>
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    title="取消关联"
+                    aria-label="取消关联"
+                    onClick={() =>
+                      patchDay({ mountedTasks: day.mountedTasks.filter((x) => x.taskId !== m.taskId) })
+                    }
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+              ))}
             </div>
           )}
-        </>
-      )}
+
+          {docLoading && <div className="journal-doc-loading">加载中…</div>}
+
+          {!docLoading && day && (
+            <>
+              {/* key 用日期：切换哪一天就重建编辑器（initialHtml 只在挂载时生效） */}
+              <RichTextEditor
+                key={date}
+                initialHtml={day.body}
+                attachFolder={`journal/${date}`}
+                attachments={day.attachments}
+                onAttachmentsChange={(next: AttachmentMeta[]) => patchDay({ attachments: next })}
+                onChange={onBodyChange}
+                editorRef={editorRef}
+                onStatus={onStatus}
+              />
+            </>
+          )}
+        </div>
+      </main>
 
       {/* 挂载任务选择器 */}
-      <Modal open={pickOpen} title={`挂载 ${date} 的任务`} onClose={() => setPickOpen(false)}>
+      <Modal open={pickOpen} title={`关联 ${formatDayLabel(date)} 的任务`} onClose={() => setPickOpen(false)}>
         {dayTasks.length === 0 ? (
           <p className="journal-pick-empty">这一天没有任务</p>
         ) : (
           <div className="journal-pick-list">
             {dayTasks.map((t) => {
-              const checked = !!draft?.mountedTasks.some((m) => m.taskId === t.id)
+              const checked = !!day?.mountedTasks.some((m) => m.taskId === t.id)
               return (
                 <label key={t.id} className="journal-pick-item">
                   <input type="checkbox" checked={checked} onChange={() => toggleMount(t)} />
-                  <span className={t.done ? 'mounted-done' : 'mounted-todo'}>{t.done ? '☑' : '☐'}</span>
+                  <span className={t.done ? 'mounted-done' : 'mounted-todo'}>
+                    {t.done ? '☑' : '☐'}
+                  </span>
                   <span className="mounted-title">{t.title || '（无标题）'}</span>
                 </label>
               )

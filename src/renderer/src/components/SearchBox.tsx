@@ -110,9 +110,8 @@ export default function SearchBox({ onPick, onPickJournal }: SearchBoxProps) {
           ) : (
             hits.map((h, i) => (
               <button
-                // 区间共享任务会让同一个 taskId 命中多天，所以 key 必须带上日期；
-                // 日志用 entryId（同一天也可能有多条）
-                key={`${h.date}-${h.entryId ?? h.taskId}-${i}`}
+                // 区间共享任务会让同一个 taskId 命中多天，所以 key 必须带上日期
+                key={`${h.date}-${h.taskId}-${i}`}
                 id={`${listId}-${i}`}
                 role="option"
                 aria-selected={i === active}

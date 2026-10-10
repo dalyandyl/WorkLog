@@ -30,7 +30,7 @@ import {
   listTrash,
   removeTrashItem,
   restoreTrashItem,
-  snapshotJournalEntryToTrash,
+  snapshotJournalDayToTrash,
   snapshotPublishRecordToTrash,
   snapshotTaskToTrash
 } from './trash'
@@ -54,7 +54,7 @@ import {
   importAttachmentFile,
   saveAttachmentBuffer
 } from './attachments'
-import type { Meeting, StickyNote, JournalEntryInput } from '../shared/types'
+import type { Meeting, StickyNote, JournalDayInput } from '../shared/types'
 import { listMeetings, saveMeeting, deleteMeeting } from './meetings'
 import { meetingToMarkdown, meetingExportFileName } from './meetingExport'
 import {
@@ -64,12 +64,11 @@ import {
   updateStickyNote
 } from './stickyNotes'
 import {
-  deleteJournalEntry,
+  deleteJournalDay,
   listJournalDates,
-  listJournalRange,
+  listJournalSummaries,
   readJournalDay,
-  readJournalEntries,
-  saveJournalEntry
+  saveJournalDay
 } from './journal'
 
 // 注：commandLine.appendSwitch 已移至 app.whenReady() 内部执行，
@@ -543,37 +542,37 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('sticky:delete', (_event, id: string) => deleteStickyNote(storageRoot, id))
 
-  // ---- 日志（时间线式个人手记；与任务相互独立，仅支持按需挂载当天任务）----
+  // ---- 日志（一天一篇连续文档；与任务相互独立，仅支持按需挂载当天任务）----
   ipcMain.handle('journal:listDates', () => listJournalDates(storageRoot))
   ipcMain.handle('journal:readDay', (_event, date: string) => readJournalDay(storageRoot, date))
   ipcMain.handle(
-    'journal:listRange',
+    'journal:listSummaries',
     (_event, opts: { before?: string; limit?: number } | undefined) =>
-      listJournalRange(storageRoot, opts ?? {})
+      listJournalSummaries(storageRoot, opts ?? {})
   )
-  ipcMain.handle('journal:saveEntry', async (_event, date: string, entry: JournalEntryInput) => {
+  ipcMain.handle('journal:saveDay', async (_event, date: string, day: JournalDayInput) => {
     try {
-      const saved = await saveJournalEntry(storageRoot, date, entry)
-      return { ok: true, entry: saved }
+      const saved = await saveJournalDay(storageRoot, date, day)
+      return { ok: true, day: saved }
     } catch (err) {
       // 日期非法 / 写盘失败都会走到这里：一定要把失败**显式**告诉渲染层，
       // 不能返回 undefined（见 memory-bank/06-conventions.md §2 的 IPC 契约规则）。
-      console.error('journal:saveEntry failed:', err)
-      return { ok: false, entry: null, error: String(err) }
+      console.error('journal:saveDay failed:', err)
+      return { ok: false, day: null, error: String(err) }
     }
   })
-  ipcMain.handle('journal:deleteEntry', async (_event, date: string, id: string) => {
+  ipcMain.handle('journal:deleteDay', async (_event, date: string) => {
     try {
       // 与任务删除同一套语义：**先快照进回收站、再删除**，失败或崩溃都不丢数据。
-      // 条目不存在时直接返回成功（幂等），不产生空的回收站条目。
-      const target = (await readJournalEntries(storageRoot, date)).find((e) => e.id === id)
-      if (!target) return { ok: true, entry: null }
-      await snapshotJournalEntryToTrash(storageRoot, date, target)
-      const removed = await deleteJournalEntry(storageRoot, date, id)
-      return { ok: true, entry: removed }
+      // 该天没有内容时直接成功返回，不产生空的回收站条目。
+      const target = await readJournalDay(storageRoot, date)
+      if (!target) return { ok: true, day: null }
+      await snapshotJournalDayToTrash(storageRoot, date, target)
+      const removed = await deleteJournalDay(storageRoot, date)
+      return { ok: true, day: removed }
     } catch (err) {
-      console.error('journal:deleteEntry failed:', err)
-      return { ok: false, entry: null, error: String(err) }
+      console.error('journal:deleteDay failed:', err)
+      return { ok: false, day: null, error: String(err) }
     }
   })
 

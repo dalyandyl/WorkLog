@@ -1,8 +1,8 @@
-import type { JournalEntry, PublishRecord, TrashItem, TrashedTask } from '../shared/types'
+import type { JournalDay, PublishRecord, TrashItem, TrashedTask } from '../shared/types'
 import { readJson, writeJson, withDataLock, reportDataWarning } from './jsonStore'
 import { trashPath } from './paths'
 import { datesOfTask, readTasks, restoreTasksToDays } from './tasks'
-import { saveJournalEntry } from './journal'
+import { saveJournalDay } from './journal'
 
 export { trashPath }
 
@@ -116,23 +116,23 @@ export interface SnapshotResult {
 }
 
 /**
- * 把一条日志条目快照进回收站。
+ * 把**一整天的日志**快照进回收站。
  *
  * 与 `snapshotTaskToTrash` 同样**不持有写锁**（`addTrashItem` 自己会加）：
  * 调用方负责「先快照、后删除」，保证删除失败或崩溃时不丢数据。
  * `tasks` 写空数组（而非 undefined），让回收站详情能无脑遍历。
  */
-export async function snapshotJournalEntryToTrash(
+export async function snapshotJournalDayToTrash(
   root: string,
   date: string,
-  entry: JournalEntry
+  day: JournalDay
 ): Promise<{ ok: boolean }> {
   await addTrashItem(root, {
     id: crypto.randomUUID(),
-    title: `日志 ${date}${entry.time ? ' ' + entry.time : ''}`,
+    title: `日志 ${date}`,
     deletedAt: new Date().toISOString(),
     tasks: [],
-    journal: { date, entry }
+    journal: { date, day }
   })
   return { ok: true }
 }
@@ -152,8 +152,8 @@ export async function restoreTrashItem(root: string, id: string): Promise<{ ok: 
   if (!item) return { ok: false }
 
   if (item.journal) {
-    // 日志：按快照里的日期与 id 重新写入（saveJournalEntry 是按 id upsert，天然幂等）
-    await saveJournalEntry(root, item.journal.date, item.journal.entry)
+    // 日志：按快照里的日期整体写回（整天覆盖，幂等）
+    await saveJournalDay(root, item.journal.date, item.journal.day)
   } else {
     // 任务：兜底 tasks 可能缺失/非数组（半损坏的 trash.json），避免直接 .map 抛错
     const trashed = Array.isArray(item.tasks) ? item.tasks : []

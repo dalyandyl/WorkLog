@@ -50,12 +50,9 @@ export default function TrashView({ onStatus, onRestored, dataVersion = 0 }: Tra
     }
   }
 
-  /** 条目描述：日志条目与任务实例的展示口径不同 */
+  /** 条目描述：日志与任务实例的展示口径不同 */
   function describe(item: TrashItem): string {
-    if (item.journal) {
-      const when = item.journal.entry.time ? ` ${item.journal.entry.time}` : ''
-      return `日志条目 · ${item.journal.date}${when}`
-    }
+    if (item.journal) return `日志 · ${item.journal.date}`
     const n = item.tasks.length
     return `${n} 个任务实例 · ${item.tasks[0]?.date ?? ''}${
       n > 1 ? ` ~ ${item.tasks[n - 1]?.date ?? ''}` : ''

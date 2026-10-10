@@ -1,5 +1,5 @@
 import { listDatesWithTasks, readTasks } from './tasks'
-import { listJournalDates, readJournalEntries } from './journal'
+import { listJournalDates, readJournalDay, toPlainText } from './journal'
 import { readTags } from './tags'
 import type { SearchHit } from '../shared/types'
 
@@ -73,18 +73,8 @@ export async function searchTasks(
   return hits
 }
 
-/** 去掉 HTML 标签得到纯文本（用于日志正文的检索与摘要） */
-function toPlainText(html: string): string {
-  return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 /**
- * 检索日志：条目正文（纯文本化后）/ 挂载的任务标题。
+ * 检索日志：整篇正文（纯文本化后）/ 挂载的任务标题。
  *
  * 与 `searchTasks` 同样的策略：从最新日期往前遍历、命中满 MAX_HITS 即停。
  */
@@ -97,35 +87,32 @@ export async function searchJournal(root: string, query: string): Promise<Search
 
   outer: for (let i = dates.length - 1; i >= 0; i--) {
     const date = dates[i]
-    const entries = await readJournalEntries(root, date)
-    for (const e of entries) {
-      const plain = toPlainText(e.body)
-      const idx = plain.toLowerCase().indexOf(q)
-      const inMount = e.mountedTasks.some((m) => m.title.toLowerCase().includes(q))
-      if (idx === -1 && !inMount) continue
+    const day = await readJournalDay(root, date)
+    if (!day) continue
+    const plain = toPlainText(day.body)
+    const idx = plain.toLowerCase().indexOf(q)
+    const inMount = day.mountedTasks.some((m) => m.title.toLowerCase().includes(q))
+    if (idx === -1 && !inMount) continue
 
-      let snippet = ''
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 30)
-        const end = Math.min(plain.length, idx + q.length + 30)
-        snippet = plain.slice(start, end)
-        if (start > 0) snippet = '…' + snippet
-        if (end < plain.length) snippet = snippet + '…'
-      } else {
-        snippet = '挂载任务：' + e.mountedTasks.map((m) => m.title).join('、')
-      }
-
-      hits.push({
-        date,
-        kind: 'journal',
-        taskId: '',
-        entryId: e.id,
-        // 日志条目没有标题字段，用时间当标题更贴近界面上的呈现
-        title: `日志 ${e.time || '--:--'}`,
-        snippet: snippet.trim()
-      })
-      if (hits.length >= MAX_HITS) break outer
+    let snippet = ''
+    if (idx !== -1) {
+      const start = Math.max(0, idx - 30)
+      const end = Math.min(plain.length, idx + q.length + 30)
+      snippet = plain.slice(start, end)
+      if (start > 0) snippet = '…' + snippet
+      if (end < plain.length) snippet = snippet + '…'
+    } else {
+      snippet = '挂载任务：' + day.mountedTasks.map((m) => m.title).join('、')
     }
+
+    hits.push({
+      date,
+      kind: 'journal',
+      taskId: '',
+      title: '日志',
+      snippet: snippet.trim()
+    })
+    if (hits.length >= MAX_HITS) break outer
   }
 
   return hits

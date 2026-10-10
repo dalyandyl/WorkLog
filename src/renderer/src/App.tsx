@@ -368,8 +368,9 @@ export default function App() {
               date={date}
               dataVersion={dataVersion}
               onStatus={notify}
+              onDateChange={selectDate}
               onOpenTask={(taskDate, taskId) => {
-                // 点击日志里挂载的任务 → 跳到「任务」页并选中它
+                // 点击日志里关联的任务 → 跳到「任务」页并选中它
                 selectDate(taskDate)
                 setDaySel({ date: taskDate, taskId })
                 setMode('day')
