@@ -18,6 +18,7 @@ import type {
   AttachmentMeta,
   DataWarning
 } from '../shared/types'
+import { normalizeAttachmentUrl } from '../shared/attachmentUrl'
 
 export type WorkLogApi = {
   getStorageRoot: () => Promise<string>
@@ -187,8 +188,15 @@ const api: WorkLogApi = {
     ipcRenderer.invoke('sync:localMtime'),
 
   // ---- 附件 ----
-  saveAttachmentImage: (folder: string, name: string, buf: ArrayBuffer): Promise<string> =>
-    ipcRenderer.invoke('attach:saveImage', folder, name, buf),
+  saveAttachmentImage: async (
+    folder: string,
+    name: string,
+    buf: ArrayBuffer
+  ): Promise<string> =>
+    normalizeAttachmentUrl(
+      await ipcRenderer.invoke('attach:saveImage', folder, name, buf),
+      'attach:saveImage'
+    ),
   pickAttachmentFiles: (
     folder: string
   ): Promise<{
@@ -208,8 +216,15 @@ const api: WorkLogApi = {
     ipcRenderer.invoke('meetings:save', meeting),
   deleteMeeting: (id: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('meetings:delete', id),
-  saveMeetingAttachment: (meetingId: string, name: string, buf: ArrayBuffer): Promise<string> =>
-    ipcRenderer.invoke('attach:saveImage', `meetings/${meetingId}`, name, buf),
+  saveMeetingAttachment: async (
+    meetingId: string,
+    name: string,
+    buf: ArrayBuffer
+  ): Promise<string> =>
+    normalizeAttachmentUrl(
+      await ipcRenderer.invoke('attach:saveImage', `meetings/${meetingId}`, name, buf),
+      'attach:saveImage (meeting)'
+    ),
   exportMeeting: (meeting: Meeting): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('meetings:export', meeting),
 

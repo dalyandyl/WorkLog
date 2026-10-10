@@ -62,6 +62,25 @@ require(path.join(root, 'node_modules', 'esbuild')).buildSync({
   outfile: sanitizeOutFile
 })
 
+// 附件链路（attachments.ts）与 URL 归一化（shared/attachmentUrl.ts）：只依赖 fs/path，可直接测
+const attachOutFile = path.join(os.tmpdir(), 'wl-attach-test.cjs')
+require(path.join(root, 'node_modules', 'esbuild')).buildSync({
+  entryPoints: [path.join(root, 'src', 'main', 'attachments.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outfile: attachOutFile
+})
+
+const urlOutFile = path.join(os.tmpdir(), 'wl-attachurl-test.cjs')
+require(path.join(root, 'node_modules', 'esbuild')).buildSync({
+  entryPoints: [path.join(root, 'src', 'shared', 'attachmentUrl.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outfile: urlOutFile
+})
+
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-data-'))
 let pass = 0
 let fail = 0
@@ -356,12 +375,67 @@ async function main() {
 
   check('空输入返回空串', sanitizeHtml('') === '')
 
+  // ---------- 11. 附件链路与 URL 归一化（图片显示 bug 的回归防护） ----------
+  console.log('\n[11] 附件链路与 URL 归一化')
+  const attachMod = require(attachOutFile)
+  const { normalizeAttachmentUrl } = require(urlOutFile)
+
+  const png = Buffer.from(
+    '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfabd40000000049454e44ae426082',
+    'hex'
+  )
+  const saved = await attachMod.saveAttachmentBuffer(
+    tmpRoot,
+    'publish',
+    '我的 截图.png',
+    png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength)
+  )
+
+  check('saveAttachmentBuffer 返回 { url, file } 对象', typeof saved === 'object' && !!saved.url && !!saved.file)
+  check(
+    'url 是 wlattach:// 字符串',
+    typeof saved.url === 'string' && saved.url.startsWith('wlattach://attachments/publish/'),
+    String(saved.url)
+  )
+  check('落盘文件真实存在', fs.existsSync(saved.file))
+
+  // 这是当初的事故点：把对象插进模板字符串会得到 "[object Object]"
+  check(
+    '【回归】对象直接插入模板字符串会产生 [object Object]（说明必须取 .url）',
+    `${saved}`.includes('[object Object]')
+  )
+
+  // 归一化必须能从两种形态里都取出正确 URL
+  check('归一化：字符串原样返回', normalizeAttachmentUrl(saved.url) === saved.url)
+  check('归一化：对象取 .url', normalizeAttachmentUrl(saved) === saved.url)
+  check('归一化：非法输入返回空串', normalizeAttachmentUrl({}) === '' && normalizeAttachmentUrl(null) === '')
+
+  // 渲染层两种插值方式在修复后都必须是合法 URL
+  const md = `![](${normalizeAttachmentUrl(saved)})`
+  const html = `<img src="${normalizeAttachmentUrl(saved)}" alt="x">`
+  check('Markdown 插值得到合法附件链接', /!\[\]\(wlattach:\/\/attachments\/publish\/.+\)/.test(md), md)
+  check('HTML 插值得到合法 src', /src="wlattach:\/\/attachments\/publish\/.+"/.test(html), html)
+
+  // 路径穿越防护仍然有效（P3-2）
+  const evil = await attachMod.saveAttachmentBuffer(
+    tmpRoot,
+    '../../evil',
+    'x.png',
+    png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength)
+  )
+  check(
+    '恶意 folder 被净化，写入仍在 attachments 内',
+    evil.file.startsWith(path.join(tmpRoot, 'attachments') + path.sep) &&
+      !evil.file.includes('..'),
+    evil.file
+  )
+  check('恶意 folder 的 URL 不含 ..', !evil.url.includes('..'), evil.url)
+
   console.log(`\n结果: ${pass} 通过 / ${fail} 失败`)
   fs.rmSync(tmpRoot, { recursive: true, force: true })
-  fs.rmSync(outFile, { force: true })
-  fs.rmSync(dateOutFile, { force: true })
-  fs.rmSync(trashOutFile, { force: true })
-  fs.rmSync(sanitizeOutFile, { force: true })
+  for (const f of [outFile, dateOutFile, trashOutFile, sanitizeOutFile, attachOutFile, urlOutFile]) {
+    fs.rmSync(f, { force: true })
+  }
   process.exit(fail === 0 ? 0 : 1)
 }
 

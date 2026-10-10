@@ -463,10 +463,17 @@ app.whenReady().then(async () => {
   })
 
   // ---- 附件 ----
+  // ⚠️ 这里必须只返回 **url 字符串**：preload 声明的契约是 `Promise<string>`，
+  // 渲染层（MarkdownEditor / MeetingEditor）会直接把它插进模板字符串
+  // （`![](${url})` / `<img src="${url}">`）。若返回 `{ url, file }` 对象，
+  // 插入的就会是字面量 `[object Object]` → 图片永远加载不出来，
+  // 表现为「破图图标 + alt 文件名」。见 memory-bank/07-optimization-backlog.md。
   ipcMain.handle(
     'attach:saveImage',
-    (_event, folder: string, name: string, buf: ArrayBuffer) =>
-      saveAttachmentBuffer(storageRoot, folder, name, buf)
+    async (_event, folder: string, name: string, buf: ArrayBuffer) => {
+      const { url } = await saveAttachmentBuffer(storageRoot, folder, name, buf)
+      return url
+    }
   )
   ipcMain.handle('attach:pickFile', async (_event, folder: string) => {
     try {
