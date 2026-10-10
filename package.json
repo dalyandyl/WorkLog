@@ -16,6 +16,7 @@
     "preview": "node scripts/electron-vite.cjs preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:data": "node scripts/test-datalayer.cjs",
+    "ui:shot": "node scripts/ui-shot-launcher.cjs",
     "dist": "electron-vite build && electron-builder --win",
     "size": "node scripts/check-size.cjs",
     "publish:gitee": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-gitee.ps1",
