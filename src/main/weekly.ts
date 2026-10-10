@@ -1,25 +1,20 @@
-import { promises as fs } from 'fs'
-import path from 'path'
 import { getWeekInfo, weekKeyToDates, type WeekInfo } from './storage'
 import type { WeeklySummary } from '../shared/types'
+import { readJson, writeJson, removeFile, withDataLock } from './jsonStore'
+import { weeklyPath } from './paths'
 
 export type { WeeklySummary }
-
-export function weeklyPath(root: string, weekKey: string): string {
-  return path.join(root, 'weekly', `${weekKey}.json`)
-}
+export { weeklyPath }
 
 export async function readWeeklySummary(
   root: string,
   weekKey: string
 ): Promise<WeeklySummary> {
-  try {
-    const raw = await fs.readFile(weeklyPath(root, weekKey), 'utf-8')
-    const data = JSON.parse(raw)
-    return { weekKey, summary: typeof data.summary === 'string' ? data.summary : '', exists: true }
-  } catch {
-    return { weekKey, summary: '', exists: false }
-  }
+  const file = weeklyPath(root, weekKey)
+  // 用 null 区分「文件不存在/已损坏」与「存在但内容为空」
+  const data = await readJson<{ weekKey?: string; summary?: unknown } | null>(file, null)
+  if (data === null) return { weekKey, summary: '', exists: false }
+  return { weekKey, summary: typeof data.summary === 'string' ? data.summary : '', exists: true }
 }
 
 export async function writeWeeklySummary(
@@ -29,12 +24,13 @@ export async function writeWeeklySummary(
 ): Promise<{ ok: boolean }> {
   const file = weeklyPath(root, weekKey)
   try {
-    if (summary.trim() === '') {
-      await fs.rm(file, { force: true })
-      return { ok: true }
-    }
-    await fs.mkdir(path.dirname(file), { recursive: true })
-    await fs.writeFile(file, JSON.stringify({ weekKey, summary }, null, 2), 'utf-8')
+    await withDataLock(async () => {
+      if (summary.trim() === '') {
+        await removeFile(file)
+        return
+      }
+      await writeJson(file, { weekKey, summary })
+    })
     return { ok: true }
   } catch (err) {
     console.error('writeWeeklySummary failed:', err)

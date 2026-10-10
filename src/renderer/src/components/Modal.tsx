@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import Overlay from './Overlay'
 
 interface ModalProps {
   open: boolean
@@ -10,29 +10,28 @@ interface ModalProps {
   children: ReactNode
 }
 
-export default function Modal({ open, title, width = 640, height, onClose, children }: ModalProps) {
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  if (!open) return null
-
+/**
+ * 居中弹窗。行为（Escape / 遮罩点击 / 焦点陷阱 / ARIA / 滚动锁）统一在 `Overlay` 中实现，
+ * 这里只固定 variant 与默认宽度。
+ */
+export default function Modal({
+  open,
+  title,
+  width = 640,
+  height,
+  onClose,
+  children
+}: ModalProps) {
   return (
-    <div className="wl-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="wl-modal" style={{ width, height }}>
-        <div className="wl-modal-head">
-          <h3>{title}</h3>
-          <button className="wl-close" onClick={onClose} title="关闭">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="wl-modal-body">{children}</div>
-      </div>
-    </div>
+    <Overlay
+      open={open}
+      title={title}
+      variant="modal"
+      width={width}
+      height={height}
+      onClose={onClose}
+    >
+      {children}
+    </Overlay>
   )
 }

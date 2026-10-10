@@ -1,3 +1,31 @@
+/*
+ * ============================================================================
+ * WorkLog 样式表
+ * ============================================================================
+ *
+ * 分区索引（按文件顺序；用编辑器搜「===== 分区名」可直接跳转）
+ *
+ *   基础层      :root 变量 / 强调色预设 / 深色覆盖 → 全局重置 → 布局骨架
+ *               （.app / .topbar / .body / .sidebar / .main）
+ *   左侧导航    左侧导航 · 日历
+ *   业务视图    日报（任务清单）· 任务详情（两态）· 任务发布 · 发布历史
+ *               周报 · 日志报表 · 统计（补充）· 标签管理
+ *   公用基元    弹窗 / 抽屉（Overlay 基元）· 图标按钮 · 日期选择器（浮层与网格）
+ *               通用虚线描边按钮 · 自定义圆角下拉（DropdownSelect）
+ *   编辑器      富文本编辑器（TipTap）· 纯 Markdown 编辑器 · 子任务
+ *   其它功能    会议纪要功能样式 · 会议功能增强样式 · 便签功能 · 任务延期弹窗
+ *               更新气泡提示（右下角）· 用户反馈气泡（Toast）· 更新公告
+ *   深色适配    深色适配（组件级补丁）—— 其余深色差异靠 :root[data-theme='dark'] 变量继承
+ *
+ * 约定（详见 memory-bank/06-conventions.md §4）
+ *   - 颜色只用变量：--bg / --panel / --border / --text / --muted / --accent /
+ *     --accent-soft / --accent-ring / --danger / --success
+ *   - 派生色用 color-mix 从 --accent 自动推导，新增一种强调色只需加一两行
+ *   - 新增样式追加到**对应领域分区**，不要新建以"轮次/版本号"命名的分区
+ *     （历史上 20 个轮次分区已按领域改名，见 memory-bank/07-optimization-backlog.md P2-5）
+ * ============================================================================
+ */
+
 :root {
   --bg: #f6f7f9;
   --panel: #ffffff;
@@ -9,6 +37,8 @@
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 28%, transparent);
   --danger: #ef4444;
+  /* 成功反馈色（Toast 用），深色模式下提亮 */
+  --success: #10b981;
   --radius: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
@@ -385,12 +415,13 @@ body {
 }
 
 /* ===================== 左侧导航 ===================== */
+/* 「功能」= 顶级父级标题：字号调大加粗，与下方分组/导航项明显区分 */
 .sidebar-heading {
   margin: 2px 8px 6px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0.6px;
-  color: var(--muted);
+  color: var(--text);
 }
 
 /* 可收缩的分区标题（如「日历」），点击切换展开/收起 */
@@ -641,8 +672,13 @@ body {
   gap: 2px;
 }
 
-.search-hit:hover {
+.search-hit:hover,
+.search-hit.active {
   background: var(--bg);
+}
+
+.search-hit.active {
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
 }
 
 .search-hit-date {
@@ -778,7 +814,8 @@ body {
   background: var(--bg);
 }
 
-.rest-toggle {
+/* 开关行（复选框 + 文字），用于设置页等 */
+.toggle-row {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -967,6 +1004,7 @@ body {
   --border: #2e3038;
   --text: #e6e7eb;
   --muted: #9aa0aa;
+  --success: #34d399;
   /* 深色下强调色软底稍强，保证可见度 */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
 }
@@ -1794,14 +1832,6 @@ body {
   font-size: 12px;
 }
 
-.weekly-rest {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
 .weekly-day-empty {
   color: var(--muted);
   font-size: 12px;
@@ -2353,7 +2383,7 @@ body {
   margin-left: 8px;
 }
 
-/* ===================== 深色适配（v3 新增部分） ===================== */
+/* ===================== 深色适配（组件级补丁） ===================== */
 [data-theme='dark'] .rich-content pre {
   background: #14161a;
 }
@@ -2376,7 +2406,7 @@ body {
     0 3px 12px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* ===================== v3.1：日报面板容器 ===================== */
+/* ===================== 日报：面板容器 ===================== */
 .day-panel {
   flex: 1;
   min-height: 0;
@@ -2409,7 +2439,7 @@ body {
   box-shadow: none;
 }
 
-/* ===================== v3.1：弹窗 / 抽屉 ===================== */
+/* ===================== 弹窗 / 抽屉（Overlay 基元） ===================== */
 .wl-overlay {
   position: fixed;
   inset: 0;
@@ -2555,7 +2585,7 @@ body {
   color: var(--text);
 }
 
-/* ===================== v3.1：发布页 ===================== */
+/* ===================== 任务发布：布局补充 ===================== */
 .publish-record-actions {
   display: flex;
   align-items: center;
@@ -2585,7 +2615,7 @@ body {
   padding: 10px 12px;
 }
 
-/* ===================== v3.1：标签管理行 ===================== */
+/* ===================== 标签管理：列表行 ===================== */
 .tag-name-text {
   flex: 1;
   min-width: 0;
@@ -2599,7 +2629,7 @@ body {
   background: var(--accent-soft);
 }
 
-/* ===================== v3.1：编辑器黄框兜底 ===================== */
+/* ===================== 编辑器：光标行高亮兜底（CaretLineHighlight） ===================== */
 .rich-content .ProseMirror:focus,
 .rich-content:focus,
 .rt-content-wrap:focus,
@@ -2628,7 +2658,7 @@ input {
   min-height: 320px;
 }
 
-/* ===================== v3.2：自定义日期选择器 ===================== */
+/* ===================== 日期选择器：浮层与网格 ===================== */
 .dp {
   position: relative;
   display: inline-block;
@@ -2848,7 +2878,7 @@ input {
   pointer-events: none;
 }
 
-/* ===================== v3.4：标签搜索 / 发布粒度与搜索 ===================== */
+/* ===================== 标签搜索 / 发布粒度与搜索 ===================== */
 .tag-search {
   padding: 9px 14px;
   border: 1.5px solid var(--border);
@@ -2909,7 +2939,7 @@ input {
   font-size: 12px;
 }
 
-/* ===================== v3.5：子任务 ===================== */
+/* ===================== 子任务 ===================== */
 .task-subtasks {
   display: flex;
   flex-direction: column;
@@ -3098,16 +3128,25 @@ input {
   text-decoration: none;
 }
 
-/* ===================== v3.6：关于系统 / 联网更新日历 ===================== */
+/* ===================== 关于系统 / 联网更新日历 ===================== */
 .cal-refresh-btn {
   margin-left: 0;
 }
 
-.cal-refresh-msg {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 2px 0;
-  text-align: center;
+.cal-foot-btns .today-btn svg,
+.cal-refresh-btn svg {
+  flex: none;
+}
+
+/* 更新日历：刷新中图标旋转 */
+@keyframes wl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cal-refresh-btn svg.spin {
+  animation: wl-spin 0.9s linear infinite;
 }
 
 .about-open-btn {
@@ -3221,7 +3260,7 @@ input {
   transition: width 0.2s ease;
 }
 
-/* ===================== v3.7：纯 Markdown 编辑器 ===================== */
+/* ===================== 纯 Markdown 编辑器 ===================== */
 .md-editor {
   flex: 1;
   min-height: 0;
@@ -3319,7 +3358,7 @@ input {
   margin: 4px 6px;
 }
 
-/* ===================== v3.7：日志报表 ===================== */
+/* ===================== 日志报表 ===================== */
 .report-view {
   flex: 1;
   min-height: 0;
@@ -3358,7 +3397,7 @@ input {
   box-shadow: var(--shadow-sm);
 }
 
-/* ===================== v3.7：周报总结弹窗 ===================== */
+/* ===================== 周报总结弹窗 ===================== */
 .weekly-summary-head {
   display: flex;
   align-items: center;
@@ -3377,7 +3416,7 @@ input {
   min-height: 420px;
 }
 
-/* ===================== v3.7：标签重名弹窗 ===================== */
+/* ===================== 标签重名提示弹窗 ===================== */
 .tag-error-msg {
   padding: 8px 2px 16px;
   font-size: 14px;
@@ -3385,7 +3424,7 @@ input {
   text-align: center;
 }
 
-/* ===================== v1.2：项目 / 回收站 / 同步 / 报表 ===================== */
+/* ===================== 回收站 / 同步 / 报表 ===================== */
 .project-select,
 .search-project {
   border: 1.5px solid var(--border);
@@ -3495,6 +3534,31 @@ input {
   font-weight: 600;
   color: var(--muted);
   margin-bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-note-label .note-edit-btn {
+  opacity: 0.55;
+}
+
+.task-note-label .note-edit-btn:hover {
+  opacity: 1;
+}
+
+.task-note-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.task-note-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
 }
 
 .task-note-input {
@@ -3508,7 +3572,7 @@ input {
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg);
-  color: var(--fg);
+  color: var(--text);
   outline: none;
 }
 
@@ -3635,7 +3699,7 @@ input {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
 
-/* ===================== v3.3：通用虚线描边按钮（同新建任务风格） ===================== */
+/* ===================== 通用虚线描边按钮（同新建任务风格） ===================== */
 .ghost-btn {
   display: inline-flex;
   align-items: center;
@@ -3688,7 +3752,7 @@ input {
   overflow: hidden;
 }
 
-/* ===================== v1.3：左侧项目菜单栏 / 日历浮层 / 设置弹窗 ===================== */
+/* ===================== 侧栏菜单 / 日历浮层 / 设置弹窗 ===================== */
 .project-menu {
   flex: 1;
   min-height: 0;
@@ -4144,6 +4208,18 @@ input {
   margin-top: 14px;
 }
 
+/* 已发布任务按窗口加载：顶部说明 + 底部「加载更多」 */
+.published-window-hint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 4px 0;
+}
+
+.published-load-more {
+  align-self: center;
+  margin: 4px 0 8px;
+}
+
 .publish-record.done {
   opacity: 0.72;
 }
@@ -4171,6 +4247,14 @@ input {
 }
 
 /* ===================== 会议纪要功能样式 ===================== */
+/* 富文本编辑器（TipTap）按需懒加载：加载期间的占位 */
+.editor-loading {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .meeting-list {
   flex: 1;
   overflow-y: auto;
@@ -4491,6 +4575,12 @@ input {
 }
 
 /* 卡片视图 */
+/* 会议列表分页加载 */
+.meeting-load-more {
+  align-self: center;
+  margin: 10px 0 16px;
+}
+
 .meeting-cards {
   display: flex;
   flex-direction: column;
@@ -4725,7 +4815,7 @@ input {
   min-width: 60px;
 }
 
-/* ===================== 第三轮打磨 ===================== */
+/* ===================== 交互细节打磨 ===================== */
 
 /* 统计卡片图标 */
 .stat-card {
@@ -4900,7 +4990,7 @@ select:not([multiple]):focus,
   line-height: 1.75;
 }
 
-/* ===================== 第四轮：报表控件 + 单选圆点 ===================== */
+/* ===================== 报表控件 + 单选圆点 ===================== */
 
 /* 报表下拉框：给最小宽度，避免被压缩、视觉更整齐 */
 .report-controls .gran-select,
@@ -4973,7 +5063,7 @@ input[type='radio']:focus-visible {
   outline-offset: 2px;
 }
 
-/* ===================== 第五轮：自定义圆角下拉 ===================== */
+/* ===================== 自定义圆角下拉（DropdownSelect） ===================== */
 
 /* 头部标题右侧的范围标签，字号略微加大 */
 .date-heading .report-range-label {
@@ -5075,9 +5165,95 @@ input[type='radio']:focus-visible {
   font-weight: 600;
 }
 
+/* 键盘导航高亮（与鼠标 hover 区分：加一圈内描边，避免两条高亮混淆） */
+.dd-item.kb-active {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
 .dd-item svg {
   flex: none;
   color: var(--accent);
+}
+
+/* ===================== 用户反馈气泡（Toast） ===================== */
+/* 替代 1.5.1 移除的「底部状态栏」。此前 onStatus 链路虽在，但 status 从未被渲染，
+   所有反馈（含错误提示）都静默丢弃；现在统一在底部居中弹出并自动消失。 */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 22px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* 容器不拦截点击，仅气泡本体可交互 */
+  pointer-events: none;
+  max-width: min(560px, calc(100vw - 48px));
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 9px 10px 9px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  line-height: 1.5;
+  animation: wl-pop-in 0.18s ease;
+}
+
+.toast-icon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.toast-msg {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.toast-close {
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.toast-success {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.toast-success .toast-icon {
+  color: var(--success);
+}
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.toast-error .toast-icon {
+  color: var(--danger);
 }
 
 /* ===================== 更新气泡提示（右下角） ===================== */
@@ -5166,6 +5342,30 @@ input[type='radio']:focus-visible {
 .update-bubble-btn:hover {
   filter: brightness(1.08);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* 次要按钮（如「取消下载」）：描边样式，不与主操作抢视觉 */
+.update-bubble-btn.ghost {
+  align-self: auto;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.update-bubble-btn.ghost:hover {
+  filter: none;
+  box-shadow: none;
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.update-bubble-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 /* ===================== 更新公告 ===================== */
@@ -5288,7 +5488,7 @@ input[type='radio']:focus-visible {
   opacity: 0.75;
 }
 
-/* ==================== 便签功能 ==================== */
+/* ===================== 便签功能 ===================== */
 
 /* ---- 便签管理页 ---- */
 /* 与统计/日报一致：通栏铺满主区，内部滚动 */
@@ -5766,7 +5966,7 @@ input[type='radio']:focus-visible {
   white-space: pre-wrap;
 }
 
-/* ==================== 任务延期弹窗 ==================== */
+/* ===================== 任务延期弹窗 ===================== */
 .postpone-body {
   display: flex;
   flex-direction: column;

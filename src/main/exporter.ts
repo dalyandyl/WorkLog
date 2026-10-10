@@ -1,6 +1,5 @@
 import { readTags, type Tag } from './tags'
 import { readTasks, type Task } from './tasks'
-import { readRestMap } from './meta'
 import { getWeekInfoByKey, readWeeklySummary } from './weekly'
 import { enumerateDates, weekdayName } from './storage'
 
@@ -37,14 +36,12 @@ function taskBodySection(task: Task, names: Map<string, string>): string[] {
 async function daySection(
   root: string,
   date: string,
-  names: Map<string, string>,
-  restSet: Set<string>
+  names: Map<string, string>
 ): Promise<string[]> {
-  const rest = restSet.has(date)
-  const heading = `## ${date} ${weekdayName(date)}${rest ? '（休息日）' : ''}`
+  const heading = `## ${date} ${weekdayName(date)}`
   const tasks = await readTasks(root, date)
   if (tasks.length === 0) {
-    return rest ? [heading, ''] : []
+    return []
   }
   const lines: string[] = [heading, '']
   for (const t of tasks) {
@@ -62,13 +59,12 @@ export async function buildDayMarkdown(
   root: string,
   date: string
 ): Promise<string> {
-  const [tags, restSet] = await Promise.all([readTags(root), readRestMap(root)])
+  const tags = await readTags(root)
   const names = tagNameMap(tags)
-  const rest = restSet.has(date)
-  const parts: string[] = [`# 日志工具 ${date} ${weekdayName(date)}${rest ? '（休息日）' : ''}`, '']
+  const parts: string[] = [`# 日志工具 ${date} ${weekdayName(date)}`, '']
   const tasks = await readTasks(root, date)
   if (tasks.length === 0) {
-    parts.push(rest ? '（休息日）' : '（当日无任务）', '')
+    parts.push('（当日无任务）', '')
     return parts.join('\n') + '\n'
   }
   for (const t of tasks) {
@@ -89,9 +85,8 @@ export async function buildWeekMarkdown(
   const info = getWeekInfoByKey(weekKey)
   if (!info) return `# 周报 ${weekKey}\n\n（周编号无效）\n`
 
-  const [tags, restSet, weekly] = await Promise.all([
+  const [tags, weekly] = await Promise.all([
     readTags(root),
-    readRestMap(root),
     readWeeklySummary(root, weekKey)
   ])
   const names = tagNameMap(tags)
@@ -99,7 +94,7 @@ export async function buildWeekMarkdown(
   const parts: string[] = [`# 周报 ${weekKey}（${info.start} ~ ${info.end}）`, '']
   let any = false
   for (const d of info.dates) {
-    const sec = await daySection(root, d, names, restSet)
+    const sec = await daySection(root, d, names)
     if (sec.length > 0) {
       parts.push(...sec)
       any = true
@@ -118,14 +113,14 @@ export async function buildRangeMarkdown(
   start: string,
   end: string
 ): Promise<string> {
-  const [tags, restSet] = await Promise.all([readTags(root), readRestMap(root)])
+  const tags = await readTags(root)
   const names = tagNameMap(tags)
 
   const dates = enumerateDates(start, end)
   const parts: string[] = [`# 日志工具 ${start} ~ ${end}`, '']
   let any = false
   for (const d of dates) {
-    const sec = await daySection(root, d, names, restSet)
+    const sec = await daySection(root, d, names)
     if (sec.length > 0) {
       parts.push(...sec)
       any = true

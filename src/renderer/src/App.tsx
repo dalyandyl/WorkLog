@@ -19,7 +19,7 @@ import SearchBox from './components/SearchBox'
 // 内存优化：非默认视图全部懒加载，TipTap / KaTeX 等重库按需进入内存
 const StatsView = lazy(() => import('./components/StatsView'))
 const TagManager = lazy(() => import('./components/TagManager'))
-const TaskPublish = lazy(() => import('./components/TaskPublish'))
+const TaskPublish = lazy(() => import('./components/TaskPublish/TaskPublishView'))
 const TrashView = lazy(() => import('./components/TrashView'))
 const ReportView = lazy(() => import('./components/ReportView'))
 const WeeklyView = lazy(() => import('./components/WeeklyView'))
@@ -29,6 +29,7 @@ const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'))
 const StickyNotesView = lazy(() => import('./components/StickyNotesView'))
 import DayView from './components/DayView'
 import UpdateBubble, { type UpdateBubbleState } from './components/UpdateBubble'
+import ToastStack, { useToasts } from './components/Toast'
 import type { AppSettings, Tag } from './types'
 import { toDateStr, weekInfoOf } from './utils/date'
 
@@ -86,7 +87,17 @@ export default function App() {
   })
   const [tags, setTags] = useState<Tag[]>([])
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set())
-  const [status, setStatus] = useState('加载中…')
+  // 用户反馈（原底部状态栏的替代）：toasts 收集、notify 作为 onStatus 下发给各视图
+  const { toasts, notify, dismiss } = useToasts()
+  /**
+   * 数据变更版本号。
+   *
+   * 历史上主区用 `<main key={mode}>` 强制重挂载来保证切页后看到最新数据 ——
+   * 代价是丢失全部未持久化草稿（发布页待发布列表、日报行内编辑、周报防抖写入）。
+   * 现在改为：任何写操作后自增 dataVersion，各视图把它放进取数 effect 的依赖里，
+   * 从而"不重挂载也能刷新自身数据"。
+   */
+  const [dataVersion, setDataVersion] = useState(0)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [calOpen, setCalOpen] = useState(true)
@@ -135,7 +146,7 @@ export default function App() {
             (b.kind === 'available' || b.kind === 'downloading' ? b.version : '')
           return { kind: 'downloaded', version: v }
         })
-      } else if (channel === 'not-available') {
+      } else if (channel === 'not-available' || channel === 'cancelled') {
         setUpdateBubble(null)
       } else if (channel === 'error') {
         setUpdateBubble((b) => {
@@ -151,11 +162,32 @@ export default function App() {
     return off
   }, [])
 
+  // 数据层告警（文件损坏被隔离 / 写盘失败 / 回收站超限）→ 用户必须看到，不能静默
   useEffect(() => {
-    const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = settings.theme === 'dark' || (settings.theme === 'system' && sysDark)
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    const off = window.api.onDataWarning((w) => {
+      notify(
+        w.kind === 'corrupt'
+          ? `数据文件异常：${w.message}（原文件已备份为 ${w.quarantine ?? '同名 .corrupt 文件'}）`
+          : `数据写入失败：${w.message}`,
+        'error'
+      )
+    })
+    return off
+  }, [notify])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    function apply(): void {
+      const isDark = settings.theme === 'dark' || (settings.theme === 'system' && mq.matches)
+      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    }
+    apply()
     document.documentElement.setAttribute('data-accent', settings.accent)
+    // 「跟随系统」需要响应系统主题切换；旧实现只在设置变化时读一次 matchMedia，
+    // 系统切深色时应用不会跟随，必须重启或改设置。
+    if (settings.theme !== 'system') return
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
   }, [settings.theme, settings.accent])
 
   // 切换视图时自动展开当前视图所在分组，避免收起状态下找不到当前页
@@ -194,6 +226,9 @@ export default function App() {
   function handleUpdateInstall(): void {
     void window.api.installUpdate()
   }
+  function handleUpdateCancel(): void {
+    void window.api.cancelUpdate()
+  }
   function handleUpdateRetry(): void {
     if (updateBubble?.kind !== 'error') return
     const version = updateBubble.version ?? ''
@@ -203,9 +238,12 @@ export default function App() {
 
   function refreshTaskDates(): void {
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
+    // 通知各视图重新拉取自己的数据（替代原先靠重挂载刷新的做法）
+    setDataVersion((v) => v + 1)
   }
   function refreshTags(): void {
     window.api.listTags().then(setTags)
+    setDataVersion((v) => v + 1)
   }
 
   function updateSettings(patch: Partial<AppSettings>): void {
@@ -273,6 +311,7 @@ export default function App() {
                         key={n.key}
                         className={mode === n.key ? 'nav-btn active' : 'nav-btn'}
                         onClick={() => setMode(n.key)}
+                        aria-current={mode === n.key ? 'page' : undefined}
                       >
                         <Icon size={17} strokeWidth={2} />
                         <span>{n.label}</span>
@@ -284,21 +323,24 @@ export default function App() {
           </nav>
 
           <div className="sidebar-bottom">
-            <button className="nav-btn" onClick={() => setSettingsOpen(true)} title="设置">
+            <button className="nav-btn" onClick={() => setSettingsOpen(true)} title="设置" aria-label="设置">
               <Settings size={17} strokeWidth={2} />
               <span>设置</span>
             </button>
           </div>
         </aside>
 
-        <main className="main" key={mode}>
-          <Suspense fallback={<div style={{ padding: 24, color: 'var(--text-secondary)' }}>加载中…</div>}>
+        {/* 不再用 key={mode} 强制重挂载：切页应保留各视图的本地草稿，
+            数据新鲜度由 dataVersion 驱动各视图自行重新取数 */}
+        <main className="main">
+          <Suspense fallback={<div style={{ padding: 24, color: 'var(--muted)' }}>加载中…</div>}>
           {mode === 'publish' && (
             <TaskPublish
               tags={tags}
-              onStatus={setStatus}
+              onStatus={notify}
               onPublished={refreshTaskDates}
               onGoToTags={() => setMode('tags')}
+              dataVersion={dataVersion}
             />
           )}
 
@@ -310,8 +352,9 @@ export default function App() {
               onSelectTask={(id) => setDaySel({ date, taskId: id })}
               onDateChange={selectDate}
               onTasksChanged={refreshTaskDates}
-              onStatus={setStatus}
+              onStatus={notify}
               onGoToTags={() => setMode('tags')}
+              dataVersion={dataVersion}
             />
           )}
 
@@ -320,30 +363,31 @@ export default function App() {
               weekKey={weekKey}
               tags={tags}
               onWeekChange={setWeekKey}
-              onStatus={setStatus}
+              onStatus={notify}
+              dataVersion={dataVersion}
             />
           )}
 
-          {mode === 'stats' && <StatsView date={date} />}
+          {mode === 'stats' && <StatsView date={date} dataVersion={dataVersion} />}
 
           {mode === 'report' && (
-            <ReportView tags={tags} onStatus={setStatus} />
+            <ReportView tags={tags} onStatus={notify} />
           )}
 
           {mode === 'tags' && (
-            <TagManager tags={tags} onChanged={refreshTags} onStatus={setStatus} />
+            <TagManager tags={tags} onChanged={refreshTags} onStatus={notify} />
           )}
 
           {mode === 'trash' && (
-            <TrashView onStatus={setStatus} onRestored={refreshTaskDates} />
+            <TrashView onStatus={notify} onRestored={refreshTaskDates} dataVersion={dataVersion} />
           )}
 
           {mode === 'meeting' && (
-            <MeetingList tags={tags} onStatus={setStatus} />
+            <MeetingList tags={tags} onStatus={notify} />
           )}
 
           {mode === 'sticky' && (
-            <StickyNotesView onStatus={setStatus} />
+            <StickyNotesView onStatus={notify} dataVersion={dataVersion} />
           )}
 
           {mode === 'announce' && <AnnouncementsView />}
@@ -357,13 +401,16 @@ export default function App() {
           settings={settings}
           onChange={updateSettings}
           onClose={() => setSettingsOpen(false)}
-          onStatus={setStatus}
+          onStatus={notify}
         />
       </Suspense>
+
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
 
       <UpdateBubble
         state={updateBubble}
         onDownload={handleUpdateDownload}
+        onCancel={handleUpdateCancel}
         onInstall={handleUpdateInstall}
         onRetry={handleUpdateRetry}
         onClose={() => setUpdateBubble(null)}

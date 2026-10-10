@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check, Plus, X } from 'lucide-react'
 import type { Subtask, Tag } from '../types'
+import TagBadgeList from './TagBadge'
 
 /** 子任务编辑器（发布表单 / 日报编辑 复用） */
 export default function SubtaskEditor({
@@ -14,6 +15,8 @@ export default function SubtaskEditor({
 }) {
   const [subInput, setSubInput] = useState('')
   const [openSubtag, setOpenSubtag] = useState<string | null>(null)
+  // 标签 id → Tag 映射：避免每个徽章都做一次线性 find
+  const tagMap = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
 
   function addSub(): void {
     const v = subInput.trim()
@@ -34,7 +37,7 @@ export default function SubtaskEditor({
             if (e.key === 'Enter') addSub()
           }}
         />
-        <button className="icon-btn primary" title="添加子任务" onClick={addSub}>
+        <button className="icon-btn primary" title="添加子任务" aria-label="添加子任务" onClick={addSub}>
           <Plus size={15} />
         </button>
       </div>
@@ -52,19 +55,7 @@ export default function SubtaskEditor({
               />
               <span className="subtask-title">{st.title}</span>
               <span className="subtask-tags">
-                {st.tags.map((id) => {
-                  const t = tags.find((x) => x.id === id)
-                  if (!t) return null
-                  return (
-                    <span
-                      key={id}
-                      className="task-item-tag"
-                      style={{ borderColor: t.color, color: t.color }}
-                    >
-                      {t.name}
-                    </span>
-                  )
-                })}
+                <TagBadgeList ids={st.tags} tagMap={tagMap} />
               </span>
               <button
                 className="tag-add-chip"

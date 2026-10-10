@@ -51,7 +51,7 @@ export default function TagPicker({ selectedIds, allTags, onChange, onGoToTags }
             </button>
           </span>
         ))}
-        <button className="tag-add-chip" onClick={() => setOpen((v) => !v)} title="添加标签">
+        <button className="tag-add-chip" onClick={() => setOpen((v) => !v)} title="添加标签" aria-label="添加标签">
           + 标签
         </button>
       </div>

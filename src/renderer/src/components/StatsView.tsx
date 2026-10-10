@@ -6,6 +6,8 @@ import DatePicker from './DatePicker'
 interface StatsViewProps {
   /** 初始区间基准（取其年月构造当月区间） */
   date: string
+  /** 数据变更版本号：变化时重新统计 */
+  dataVersion?: number
 }
 
 function monthRange(year: number, month: number): { start: string; end: string } {
@@ -15,7 +17,7 @@ function monthRange(year: number, month: number): { start: string; end: string }
   return { start, end }
 }
 
-export default function StatsView({ date }: StatsViewProps) {
+export default function StatsView({ date, dataVersion = 0 }: StatsViewProps) {
   const [y, m] = [Number(date.slice(0, 4)), Number(date.slice(5, 7))]
   const [range, setRange] = useState(() => monthRange(y, m))
   const [stats, setStats] = useState<MonthStats | null>(null)
@@ -42,7 +44,7 @@ export default function StatsView({ date }: StatsViewProps) {
     return () => {
       cancelled = true
     }
-  }, [range.start, range.end])
+  }, [range.start, range.end, dataVersion])
 
   if (!stats) return <div className="loading">统计中…</div>
 
@@ -54,7 +56,7 @@ export default function StatsView({ date }: StatsViewProps) {
   return (
     <div className="stats-view">
       <div className="stats-head">
-        <button className="week-nav" onClick={() => gotoMonth(-1)} title="上个月">
+        <button className="week-nav" onClick={() => gotoMonth(-1)} title="上个月" aria-label="上个月">
           ‹
         </button>
         <DatePicker
@@ -63,7 +65,7 @@ export default function StatsView({ date }: StatsViewProps) {
           onChange={(v) => setRange(monthRange(Number(v.slice(0, 4)), Number(v.slice(5, 7))))}
           title="点击选择月份（日历中可选年/月）"
         />
-        <button className="week-nav" onClick={() => gotoMonth(1)} title="下个月">
+        <button className="week-nav" onClick={() => gotoMonth(1)} title="下个月" aria-label="下个月">
           ›
         </button>
         <button className="week-today" onClick={thisMonth}>
@@ -102,7 +104,9 @@ export default function StatsView({ date }: StatsViewProps) {
             <ListTodo size={18} />
           </span>
           <div className="stat-num">{stats.totalTasks}</div>
-          <div className="stat-label">任务总数</div>
+          <div className="stat-label" title="跨天共享的区间任务按 1 个计">
+            任务总数
+          </div>
         </div>
         <div className="stat-card">
           <span className="stat-icon">

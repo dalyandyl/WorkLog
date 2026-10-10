@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
-import type { Tag } from '../types'
+import type { StatusReporter, Tag } from '../types'
 import Modal from './Modal'
 
 interface TagManagerProps {
   tags: Tag[]
   onChanged: () => void
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
 }
 
 const PRESET_COLORS = [
@@ -76,10 +76,10 @@ function TagRow({
           onChange={(e) => setColor(e.target.value)}
           title="修改颜色"
         />
-        <button className="icon-btn primary" onClick={save} title="保存">
+        <button className="icon-btn primary" onClick={save} title="保存" aria-label="保存">
           <Save size={15} />
         </button>
-        <button className="icon-btn" onClick={cancel} title="取消">
+        <button className="icon-btn" onClick={cancel} title="取消" aria-label="取消">
           <X size={15} />
         </button>
       </div>
@@ -93,10 +93,10 @@ function TagRow({
       <span className="tag-use-info muted">
         使用 {tag.useCount ?? 0} 次 · 创建于 {tag.createdAt.slice(0, 10)}
       </span>
-      <button className="icon-btn" onClick={() => setEditing(true)} title="编辑">
+      <button className="icon-btn" onClick={() => setEditing(true)} title="编辑" aria-label="编辑">
         <Pencil size={15} />
       </button>
-      <button className="icon-btn danger" onClick={() => onDelete(tag.id, tag.name)} title="删除标签">
+      <button className="icon-btn danger" onClick={() => onDelete(tag.id, tag.name)} title="删除标签" aria-label="删除标签">
         <Trash2 size={15} />
       </button>
     </div>
@@ -203,6 +203,8 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
                 style={{ background: c }}
                 onClick={() => setNewColor(c)}
                 title={c}
+                aria-label={`颜色 ${c}`}
+                aria-pressed={newColor === c}
               />
             ))}
             <input
@@ -211,6 +213,7 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
               value={newColor}
               onChange={(e) => setNewColor(e.target.value)}
               title="自定义颜色"
+              aria-label="自定义标签颜色"
             />
           </div>
           <div className="tag-create-actions">

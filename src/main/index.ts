@@ -3,9 +3,10 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 import { getStorageRoot, migrateStorageRoot } from './storage'
-import { checkForUpdates, downloadUpdate, initUpdater, installUpdate, setUpdateSource } from './updater'
-import { readSettings, writeSettings, isRest, setRest } from './meta'
-import type { UpdateSource } from '../shared/types'
+import { cancelUpdateDownload, checkForUpdates, downloadUpdate, initUpdater, installUpdate, setUpdateSource } from './updater'
+import { readSettings, writeSettings } from './meta'
+import { setDataWarningHandler, type DataWarning } from './jsonStore'
+import type { AppSettings, ReminderSetting, UpdateSource, WebdavConfig } from '../shared/types'
 import {
   createTask,
   datesOfTask,
@@ -16,6 +17,7 @@ import {
   readTasks,
   readTasksMany,
   reorderTasks,
+  resetTaskCache,
   restoreTasksToDays,
   updateTask,
   type NewTaskInput,
@@ -23,11 +25,12 @@ import {
 } from './tasks'
 import { createTag, deleteTag, listTags, recolorTag, renameTag } from './tags'
 import {
-  addTrashItem,
   clearTrash,
+  findTrashItem,
   listTrash,
   removeTrashItem,
-  takeTrashItem
+  snapshotPublishRecordToTrash,
+  snapshotTaskToTrash
 } from './trash'
 import {
   getWeekInfoByKey,
@@ -42,7 +45,7 @@ import { addPublishRecord, deletePublishRecord, readPublishRecords } from './his
 import { buildDayMarkdown, buildRangeMarkdown, buildWeekMarkdown } from './exporter'
 import { exportBackup, importBackup } from './backup'
 import { migrateLegacyData, resetMigration } from './migrate'
-import { createTray, startReminder } from './tray'
+import { applyReminder, createTray } from './tray'
 import {
   attachmentUrlToPath,
   deleteAttachmentFile,
@@ -81,6 +84,87 @@ function broadcastUpdate(channel: string, payload: unknown): void {
   }
 }
 
+/**
+ * 数据层告警（文件损坏被隔离、写盘失败、回收站超限等）。
+ *
+ * 启动阶段（迁移旧数据）窗口还没建好，此时直接 send 会丢失，
+ * 因此先缓冲，等渲染层加载完成后再补发 —— 不能把启动期的数据问题吞掉。
+ */
+const pendingDataWarnings: DataWarning[] = []
+
+function broadcastDataWarning(w: DataWarning): void {
+  const wins = BrowserWindow.getAllWindows()
+  if (wins.length === 0) {
+    pendingDataWarnings.push(w)
+    return
+  }
+  for (const win of wins) {
+    win.webContents.send('data:warning', w)
+  }
+}
+
+function flushDataWarnings(webContents: Electron.WebContents): void {
+  for (const w of pendingDataWarnings.splice(0)) {
+    webContents.send('data:warning', w)
+  }
+}
+
+/**
+ * 内存中的当前设置缓存。
+ * `before-quit` 需要在**同步**阶段决定是否阻止退出，不能在里面 await 读盘，
+ * 因此设置变化时同步维护这份缓存。
+ */
+let cachedSettings: AppSettings | null = null
+
+/** WebDAV 自动同步的排程相关字段是否变化（变了才需要重建定时器） */
+function webdavScheduleChanged(a: WebdavConfig, b: WebdavConfig): boolean {
+  return (
+    a.enabled !== b.enabled ||
+    a.autoMode !== b.autoMode ||
+    a.intervalMinutes !== b.intervalMinutes ||
+    a.url !== b.url ||
+    a.username !== b.username
+  )
+}
+
+/** 每日提醒的时间/开关是否变化 */
+function reminderChanged(a: ReminderSetting, b: ReminderSetting): boolean {
+  return a.enabled !== b.enabled || a.time !== b.time
+}
+
+interface SaveResult {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  error?: string
+}
+
+/**
+ * 「弹保存对话框 → 写入」的统一封装。
+ *
+ * 改造前这段逻辑在 `index.ts` 里逐字重复了 5 次
+ * （`meetings:export` / `export:md` / `backup:export` / `report:exportMd` / `report:exportWord`），
+ * 每处都各自处理 canceled / try-catch / 焦点窗口。见 memory-bank/07-optimization-backlog.md P2-4。
+ */
+async function saveWithDialog(
+  title: string,
+  defaultPath: string,
+  filters: Electron.FileFilter[],
+  save: (filePath: string) => Promise<void>
+): Promise<SaveResult> {
+  try {
+    const options: Electron.SaveDialogOptions = { title, defaultPath, filters }
+    const win = BrowserWindow.getFocusedWindow()
+    const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+    await save(res.filePath)
+    return { ok: true, path: res.filePath }
+  } catch (err) {
+    console.error(`${title} failed:`, err)
+    return { ok: false, error: String(err) }
+  }
+}
+
 function appIconPath(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'icon.png')
@@ -106,6 +190,11 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // 渲染层加载完成后补发启动期缓冲的数据层告警
+  mainWindow.webContents.on('did-finish-load', () => {
+    flushDataWarnings(mainWindow.webContents)
   })
 
   // 彻底移除窗口菜单栏：autoHideMenuBar 只是“隐藏”，按 Alt 仍会弹出默认的
@@ -171,6 +260,9 @@ app.whenReady().then(async () => {
 
   app.setAppUserModelId('com.worklog.app')
 
+  // 数据层告警出口（须早于任何读写数据的调用，例如下面的迁移）
+  setDataWarningHandler(broadcastDataWarning)
+
   // 移除 Electron 默认应用菜单（File/Edit/View/Window），避免任何窗口被自动赋予菜单
   Menu.setApplicationMenu(null)
 
@@ -216,20 +308,8 @@ app.whenReady().then(async () => {
   )
   // ---- 删除单个已发布任务：进回收站（含区间共享任务的所有日期） ----
   ipcMain.handle('tasks:trash', async (_event, date: string, taskId: string) => {
-    const dates = await datesOfTask(storageRoot, taskId)
-    const trashedTasks: { date: string; task: Task }[] = []
-    for (const d of dates) {
-      const tasks = await readTasks(storageRoot, d)
-      const task = tasks.find((t) => t.id === taskId)
-      if (task) trashedTasks.push({ date: d, task })
-    }
-    if (trashedTasks.length === 0) return { ok: false }
-    await addTrashItem(storageRoot, {
-      id: crypto.randomUUID(),
-      title: trashedTasks[0].task.title || '未命名任务',
-      deletedAt: new Date().toISOString(),
-      tasks: trashedTasks
-    })
+    const snap = await snapshotTaskToTrash(storageRoot, taskId)
+    if (!snap.ok) return { ok: false }
     await deleteTask(storageRoot, date, taskId)
     return { ok: true }
   })
@@ -286,12 +366,14 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('trash:remove', (_event, id: string) => removeTrashItem(storageRoot, id))
   ipcMain.handle('trash:restore', async (_event, id: string) => {
-    const item = await takeTrashItem(storageRoot, id)
+    // 先重放成功再移出回收站：旧实现「取出即移除」会在重放失败时永久丢失条目
+    const item = await findTrashItem(storageRoot, id)
     if (!item) return { ok: false }
     await restoreTasksToDays(
       storageRoot,
       item.tasks.map((t) => ({ date: t.date, task: t.task }))
     )
+    await removeTrashItem(storageRoot, id)
     return { ok: true }
   })
 
@@ -300,30 +382,11 @@ app.whenReady().then(async () => {
     const records = await readPublishRecords(storageRoot)
     const rec = records.find((r) => r.id === id)
     if (!rec) return { ok: false }
-    // 区间共享任务同一 id 跨多天：先按唯一任务 id 收集所有日期的实例，再删除
-    const trashedTasks: { date: string; task: Task }[] = []
-    const seenTaskIds = new Set<string>()
-    for (const inst of rec.instances ?? []) {
-      if (seenTaskIds.has(inst.taskId)) continue
-      seenTaskIds.add(inst.taskId)
-      const dates = await datesOfTask(storageRoot, inst.taskId)
-      for (const d of dates) {
-        const tasks = await readTasks(storageRoot, d)
-        const task = tasks.find((t) => t.id === inst.taskId)
-        if (task) trashedTasks.push({ date: d, task })
-      }
-    }
-    if (trashedTasks.length > 0) {
-      await addTrashItem(storageRoot, {
-        id: crypto.randomUUID(),
-        title: rec.title,
-        deletedAt: new Date().toISOString(),
-        tasks: trashedTasks
-      })
-      // deleteTask 会同步删除所有包含该 id 的日期
-      for (const taskId of seenTaskIds) {
-        await deleteTask(storageRoot, trashedTasks[0].date, taskId)
-      }
+    // 区间共享任务同一 id 跨多天：快照组装下沉到 trash.ts（先快照、后删除）
+    const snap = await snapshotPublishRecordToTrash(storageRoot, rec)
+    for (const taskId of snap.taskIds) {
+      // deleteTask 忽略传入的 date（它自己按 id 扫描所有包含该 id 的日期）
+      await deleteTask(storageRoot, '', taskId)
     }
     await deletePublishRecord(storageRoot, id)
     return { ok: true }
@@ -343,16 +406,23 @@ app.whenReady().then(async () => {
     shiftWeekKey(weekKey, delta)
   )
 
-  // ---- 休息日 / 设置 ----
-  ipcMain.handle('rest:get', (_event, date: string) => isRest(storageRoot, date))
-  ipcMain.handle('rest:set', (_event, date: string, rest: boolean) =>
-    setRest(storageRoot, date, rest)
-  )
+  // ---- 设置 ----
   ipcMain.handle('settings:get', () => readSettings(storageRoot))
   ipcMain.handle('settings:set', async (_event, s) => {
+    // 先读旧设置，用于判断哪些"运行时排程"需要重排
+    const prev = await readSettings(storageRoot)
     await writeSettings(storageRoot, s)
+    cachedSettings = s
     // 设置变化时同步应用更新镜像源（如设置页切换了镜像源）
     if (s && typeof s.updateSource === 'string') setUpdateSource(s.updateSource)
+    // WebDAV 自动同步与每日提醒都是常驻定时器：相关字段变化时必须重排，
+    // 否则改了间隔 / 开关需要重启应用才生效（旧实现的缺陷）
+    if (s?.webdav && webdavScheduleChanged(prev.webdav, s.webdav)) {
+      await applyAutoSync()
+    }
+    if (s?.reminder && reminderChanged(prev.reminder, s.reminder)) {
+      applyReminder(s.reminder.enabled, s.reminder.time)
+    }
   })
 
   // ---- 搜索 / 统计 ----
@@ -458,16 +528,12 @@ app.whenReady().then(async () => {
         .map((id) => tags.find((t) => t.id === id)?.name)
         .filter((n): n is string => Boolean(n))
       const md = meetingToMarkdown(meeting, tagNames)
-      const options: Electron.SaveDialogOptions = {
-        title: '导出会议纪要',
-        defaultPath: meetingExportFileName(meeting),
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
-      }
-      const win = BrowserWindow.getFocusedWindow()
-      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
-      await fs.writeFile(res.filePath, md, 'utf-8')
-      return { ok: true, path: res.filePath }
+      return await saveWithDialog(
+        '导出会议纪要',
+        meetingExportFileName(meeting),
+        [{ name: 'Markdown', extensions: ['md'] }],
+        (filePath) => fs.writeFile(filePath, md, 'utf-8')
+      )
     } catch (err) {
       console.error('meetings:export failed:', err)
       return { ok: false, error: String(err) }
@@ -493,17 +559,12 @@ app.whenReady().then(async () => {
         return { ok: false, error: '导出参数不完整' }
       }
 
-      const options: Electron.SaveDialogOptions = {
-        title: '导出 Markdown',
-        defaultPath: defaultName,
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
-      }
-      const win = BrowserWindow.getFocusedWindow()
-      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
-
-      await fs.writeFile(res.filePath, content, 'utf-8')
-      return { ok: true, path: res.filePath }
+      return await saveWithDialog(
+        '导出 Markdown',
+        defaultName,
+        [{ name: 'Markdown', extensions: ['md'] }],
+        (filePath) => fs.writeFile(filePath, content, 'utf-8')
+      )
     } catch (err) {
       console.error('export:md failed:', err)
       return { ok: false, error: String(err) }
@@ -512,23 +573,14 @@ app.whenReady().then(async () => {
 
   // ---- 备份 ----
   ipcMain.handle('backup:export', async () => {
-    try {
-      const d = new Date()
-      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-      const options: Electron.SaveDialogOptions = {
-        title: '导出备份',
-        defaultPath: `日志工具备份-${stamp}.zip`,
-        filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }]
-      }
-      const win = BrowserWindow.getFocusedWindow()
-      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
-      await exportBackup(storageRoot, res.filePath)
-      return { ok: true, path: res.filePath }
-    } catch (err) {
-      console.error('backup:export failed:', err)
-      return { ok: false, error: String(err) }
-    }
+    const d = new Date()
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    return saveWithDialog(
+      '导出备份',
+      `日志工具备份-${stamp}.zip`,
+      [{ name: 'Zip 压缩包', extensions: ['zip'] }],
+      (filePath) => exportBackup(storageRoot, filePath)
+    )
   })
 
   ipcMain.handle('backup:import', async () => {
@@ -543,6 +595,7 @@ app.whenReady().then(async () => {
       if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true }
       await importBackup(storageRoot, res.filePaths[0])
       await resetMigration(storageRoot) // 导入旧备份后重新执行迁移
+      resetTaskCache() // 磁盘内容被整体替换：丢弃天文件缓存与任务索引
       return { ok: true }
     } catch (err) {
       console.error('backup:import failed:', err)
@@ -551,14 +604,16 @@ app.whenReady().then(async () => {
   })
 
   createTray(showWindow)
-  startReminder(storageRoot)
   createWindow()
 
   // ---- 自动更新（Gitee / GitHub 双通道，运行时经 API 校验令牌与仓库配置） ----
   initUpdater(broadcastUpdate)
   // 应用设置里保存的更新镜像源（auto / gitee / github）
   const initSettings = await readSettings(storageRoot)
+  cachedSettings = initSettings
   setUpdateSource(initSettings.updateSource)
+  // 每日提醒：按目标时刻精确排程（不再 30 秒轮询读盘）
+  applyReminder(initSettings.reminder.enabled, initSettings.reminder.time)
   ipcMain.handle('app:getInfo', () => ({
     appVersion: app.getVersion(),
     electron: process.versions.electron,
@@ -570,6 +625,7 @@ app.whenReady().then(async () => {
   }))
   ipcMain.handle('update:check', () => checkForUpdates())
   ipcMain.handle('update:download', () => downloadUpdate())
+  ipcMain.handle('update:cancel', () => cancelUpdateDownload())
   ipcMain.handle('update:install', () => installUpdate())
   ipcMain.handle('update:set-source', (_event, source: UpdateSource) => {
     setUpdateSource(source)
@@ -577,15 +633,39 @@ app.whenReady().then(async () => {
   })
 
   // ---- WebDAV 跨设备同步 ----
+  /** 拉取前自动备份本地数据（保留最近 3 份），放在数据根目录之外避免被再次打包上传 */
+  async function backupBeforePull(): Promise<void> {
+    try {
+      const dir = path.join(app.getPath('userData'), 'pre-pull-backup')
+      await fs.mkdir(dir, { recursive: true })
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      await exportBackup(storageRoot, path.join(dir, `logs-${stamp}.zip`))
+      // 只保留最近 3 份
+      const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.zip')).sort()
+      for (const f of files.slice(0, Math.max(0, files.length - 3))) {
+        await fs.rm(path.join(dir, f), { force: true })
+      }
+    } catch (err) {
+      // 备份失败不应阻断同步，只记录
+      console.error('拉取前自动备份失败:', err)
+    }
+  }
+
   async function syncWithResult(which: 'push' | 'pull'): Promise<{ ok: boolean; error?: string }> {
     const s = await readSettings(storageRoot)
     if (!s.webdav.url || !s.webdav.username) {
       return { ok: false, error: '请先在设置中配置 WebDAV（地址 / 账号 / 密码）' }
     }
+    // 拉取是「解压合并覆盖」，可能盖掉本地较新的文件且没有版本比较：
+    // 先自动留一份本地快照，用户随时可以回退
+    if (which === 'pull') await backupBeforePull()
     const r = which === 'push' ? await webdavPush(storageRoot, s.webdav) : await webdavPull(storageRoot, s.webdav)
     if (r.ok) {
+      // 拉取会整体覆盖本地文件：必须丢弃天文件缓存与任务索引
+      if (which === 'pull') resetTaskCache()
       s.webdav.lastSyncAt = new Date().toISOString()
       await writeSettings(storageRoot, s)
+      cachedSettings = s
     }
     return r
   }
@@ -593,72 +673,67 @@ app.whenReady().then(async () => {
   ipcMain.handle('sync:pull', () => syncWithResult('pull'))
   ipcMain.handle('sync:localMtime', async () => ({ ok: true, mtime: await lastDataMtime(storageRoot) }))
 
-  // 自动同步：启动时拉取 / 定时上传
-  async function scheduleAutoSync(): Promise<void> {
+  // 自动同步：启动时拉取 / 定时上传。
+  // 定时器由 applyAutoSync 统一管理，settings:set 中相关字段变化时会重排，
+  // 因此改间隔 / 改开关不再需要重启应用。
+  let autoSyncTimer: NodeJS.Timeout | null = null
+
+  async function applyAutoSync(): Promise<void> {
+    if (autoSyncTimer) {
+      clearInterval(autoSyncTimer)
+      autoSyncTimer = null
+    }
     const s = await readSettings(storageRoot)
     if (!s.webdav.enabled || !s.webdav.url || !s.webdav.username) return
     if (s.webdav.autoMode === 'startup') {
       await syncWithResult('pull')
+      return
     }
     if (s.webdav.autoMode === 'interval') {
       const minutes = Math.max(5, s.webdav.intervalMinutes || 30)
-      setInterval(() => {
+      autoSyncTimer = setInterval(() => {
         void syncWithResult('push')
       }, minutes * 60 * 1000)
     }
   }
-  void scheduleAutoSync()
+  void applyAutoSync()
 
-  // 退出时自动上传（仅一次）
+  // 退出时自动上传（仅一次）。
+  // 注意：必须**同步**判断并 preventDefault —— 若先 await 读盘再 preventDefault，
+  // 异步间隙里 quit 流程已经继续，上传会被跳过（旧实现的丢同步窗口）。
   let exitPushed = false
   app.on('before-quit', (e) => {
     if (exitPushed) return
+    const s = cachedSettings
+    if (!s || !s.webdav.enabled || s.webdav.autoMode !== 'exit') return
+    if (!s.webdav.url || !s.webdav.username) return
     exitPushed = true
+    e.preventDefault()
     void (async () => {
-      const s = await readSettings(storageRoot)
-      if (s.webdav.enabled && s.webdav.autoMode === 'exit' && s.webdav.url && s.webdav.username) {
-        e.preventDefault()
-        await syncWithResult('push')
-        app.quit()
-      }
+      await syncWithResult('push')
+      app.quit()
     })()
   })
 
   // ---- 报表导出（MD / Word） ----
-  ipcMain.handle('report:exportMd', async (_event, md: string, defaultName: string) => {
-    try {
-      const options: Electron.SaveDialogOptions = {
-        title: '导出报表',
-        defaultPath: `${defaultName}.md`,
-        filters: [{ name: 'Markdown 文件', extensions: ['md'] }]
-      }
-      const win = BrowserWindow.getFocusedWindow()
-      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
-      await fs.writeFile(res.filePath, md, 'utf-8')
-      return { ok: true, path: res.filePath }
-    } catch (err) {
-      return { ok: false, error: String(err) }
-    }
-  })
+  ipcMain.handle('report:exportMd', (_event, md: string, defaultName: string) =>
+    saveWithDialog(
+      '导出报表',
+      `${defaultName}.md`,
+      [{ name: 'Markdown 文件', extensions: ['md'] }],
+      (filePath) => fs.writeFile(filePath, md, 'utf-8')
+    )
+  )
 
   // Word 导出：以 HTML 内容保存为 .doc（Word/WPS 可直接打开）
-  ipcMain.handle('report:exportWord', async (_event, html: string, defaultName: string) => {
-    try {
-      const options: Electron.SaveDialogOptions = {
-        title: '导出报表',
-        defaultPath: `${defaultName}.doc`,
-        filters: [{ name: 'Word 文档', extensions: ['doc'] }]
-      }
-      const win = BrowserWindow.getFocusedWindow()
-      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
-      await fs.writeFile(res.filePath, html, 'utf-8')
-      return { ok: true, path: res.filePath }
-    } catch (err) {
-      return { ok: false, error: String(err) }
-    }
-  })
+  ipcMain.handle('report:exportWord', (_event, html: string, defaultName: string) =>
+    saveWithDialog(
+      '导出报表',
+      `${defaultName}.doc`,
+      [{ name: 'Word 文档', extensions: ['doc'] }],
+      (filePath) => fs.writeFile(filePath, html, 'utf-8')
+    )
+  )
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

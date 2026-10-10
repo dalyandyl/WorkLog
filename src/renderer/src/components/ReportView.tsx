@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Eye } from 'lucide-react'
-import type { MonthStats, Tag, Task } from '../types'
+import type { MonthStats, StatusReporter, Tag, Task } from '../types'
 import { toDateStr } from '../utils/date'
 import { renderMarkdown } from '../utils/markdown'
 import {
@@ -17,7 +17,7 @@ import Modal from './Modal'
 
 interface ReportViewProps {
   tags: Tag[]
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
 }
 
 const GRAN_OPTIONS: { value: ReportGranularity; label: string }[] = [
@@ -99,14 +99,14 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
     if (!md) return
     const r = await window.api.exportReportMd(md, `日志报表-${rangeLabel}-${PART_LABEL[part]}`)
     if (r.ok) onStatus('已导出 Markdown：' + r.path)
-    else if (!r.canceled && r.error) onStatus('导出失败：' + r.error)
+    else if (!r.canceled && r.error) onStatus('导出失败：' + r.error, 'error')
   }
 
   async function exportWord(part: ReportPart): Promise<void> {
     if (!stats) return
     const r = await window.api.exportReportWord(wordHtml(part), `日志报表-${rangeLabel}-${PART_LABEL[part]}`)
     if (r.ok) onStatus('已导出 Word：' + r.path)
-    else if (!r.canceled && r.error) onStatus('导出失败：' + r.error)
+    else if (!r.canceled && r.error) onStatus('导出失败：' + r.error, 'error')
   }
 
   function showPreview(kind: 'md' | 'word'): void {
@@ -134,7 +134,7 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
         <div className="report-actions">
           <div className="report-export-group">
             <span className="report-export-label">MD</span>
-            <button className="icon-btn" onClick={() => showPreview('md')} title="预览 Markdown">
+            <button className="icon-btn" onClick={() => showPreview('md')} title="预览 Markdown" aria-label="预览 Markdown">
               <Eye size={15} />
             </button>
             <button className="ghost-btn" onClick={() => exportMd(mdPart)} disabled={!stats}>导出</button>
@@ -147,7 +147,7 @@ export default function ReportView({ tags, onStatus }: ReportViewProps) {
           </div>
           <div className="report-export-group">
             <span className="report-export-label">Word</span>
-            <button className="icon-btn" onClick={() => showPreview('word')} title="预览 Word">
+            <button className="icon-btn" onClick={() => showPreview('word')} title="预览 Word" aria-label="预览 Word">
               <Eye size={15} />
             </button>
             <button className="ghost-btn" onClick={() => exportWord(wordPart)} disabled={!stats}>导出</button>

@@ -12,10 +12,12 @@ import {
   X
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { StickyNote } from '../types'
+import type { StatusReporter, StickyNote } from '../types'
 
 interface StickyNotesViewProps {
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
+  /** 数据变更版本号：变化时重新拉取便签列表 */
+  dataVersion?: number
 }
 
 type SectionAccent = 'amber' | 'gray' | 'green'
@@ -28,7 +30,7 @@ interface SectionSpec {
 }
 
 /** 便签管理页：新增 / 置顶 / 标记完成 / 编辑 / 删除；置顶且未完成的便签会出现在日报中 */
-export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
+export default function StickyNotesView({ onStatus, dataVersion = 0 }: StickyNotesViewProps) {
   const [notes, setNotes] = useState<StickyNote[]>([])
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -41,12 +43,12 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
   useEffect(() => {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [dataVersion])
 
   async function addNote(): Promise<void> {
     const text = draft.trim()
     if (!text) {
-      onStatus('请输入便签内容')
+      onStatus('请输入便签内容', 'error')
       return
     }
     await window.api.addStickyNote(text)
@@ -75,7 +77,7 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
   async function saveEdit(n: StickyNote): Promise<void> {
     const text = editingText.trim()
     if (!text) {
-      onStatus('便签内容不能为空')
+      onStatus('便签内容不能为空', 'error')
       return
     }
     await window.api.updateStickyNote(n.id, { text })
@@ -126,12 +128,12 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
           )}
           <div className="sticky-card-actions" onClick={(e) => e.stopPropagation()}>
             {!done && (
-              <button className="icon-btn" onClick={() => toggleComplete(n)} title="标记完成（从日报移除）">
+              <button className="icon-btn" onClick={() => toggleComplete(n)} title="标记完成（从日报移除）" aria-label="标记完成（从日报移除）">
                 <Check size={15} />
               </button>
             )}
             {done && (
-              <button className="icon-btn" onClick={() => toggleComplete(n)} title="取消完成">
+              <button className="icon-btn" onClick={() => toggleComplete(n)} title="取消完成" aria-label="取消完成">
                 <Check size={15} className="recheck" />
               </button>
             )}
@@ -146,19 +148,19 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
             )}
             {editing ? (
               <>
-                <button className="icon-btn primary" onClick={() => saveEdit(n)} title="保存">
+                <button className="icon-btn primary" onClick={() => saveEdit(n)} title="保存" aria-label="保存">
                   <Save size={15} />
                 </button>
-                <button className="icon-btn" onClick={() => setEditingId(null)} title="取消">
+                <button className="icon-btn" onClick={() => setEditingId(null)} title="取消" aria-label="取消">
                   <X size={15} />
                 </button>
               </>
             ) : (
-              <button className="icon-btn" onClick={() => startEdit(n)} title="编辑内容">
+              <button className="icon-btn" onClick={() => startEdit(n)} title="编辑内容" aria-label="编辑内容">
                 <Pencil size={15} />
               </button>
             )}
-            <button className="icon-btn danger" onClick={() => del(n)} title="删除便签">
+            <button className="icon-btn danger" onClick={() => del(n)} title="删除便签" aria-label="删除便签">
               <Trash2 size={15} />
             </button>
           </div>

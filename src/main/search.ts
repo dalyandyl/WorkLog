@@ -4,8 +4,15 @@ import type { SearchHit } from '../shared/types'
 
 export type { SearchHit }
 
+/** 单次检索返回的最大条数 */
+const MAX_HITS = 50
+
 /**
  * 检索任务：标题 / 正文 / 子任务标题 / 标签名（匹配标签名即命中使用该标签的任务）。
+ *
+ * 性能与语义：命中满 MAX_HITS 条立即停止扫描（不再遍历剩余天文件）；
+ * 之所以从**最新日期往前**遍历，是为了让结果天然按日期倒序，
+ * 避免"先正序收集全部命中再 reverse"造成无谓的全库扫描与内存占用。
  */
 export async function searchTasks(
   root: string,
@@ -21,7 +28,8 @@ export async function searchTasks(
   const dates = await listDatesWithTasks(root)
   const hits: SearchHit[] = []
 
-  for (const date of dates) {
+  outer: for (let i = dates.length - 1; i >= 0; i--) {
+    const date = dates[i]
     const tasks = await readTasks(root, date)
     for (const t of tasks) {
       const plainBody = t.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
@@ -56,14 +64,10 @@ export async function searchTasks(
         snippet = plainBody.slice(0, 60)
         if (plainBody.length > 60) snippet += '…'
       }
-      snippet = snippet.trim()
-      hits.push({ date, taskId: t.id, title: t.title, snippet })
-      if (hits.length >= 50) {
-        hits.splice(0, hits.length - 50)
-      }
+      hits.push({ date, taskId: t.id, title: t.title, snippet: snippet.trim() })
+      if (hits.length >= MAX_HITS) break outer
     }
   }
 
-  hits.reverse()
-  return hits.slice(0, 50)
+  return hits
 }

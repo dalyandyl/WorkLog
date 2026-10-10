@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CalendarDays, CheckCircle2, PinOff, Save, StickyNote as StickyNoteIcon, X } from 'lucide-react'
-import type { StickyNote, Subtask, Tag, Task } from '../types'
+import type { StatusReporter, StickyNote, Subtask, Tag, Task } from '../types'
 import { toDateStr, weekdayOf } from '../utils/date'
 import TaskDetail from './TaskDetail'
 import DatePicker from './DatePicker'
@@ -8,6 +8,7 @@ import TagPicker from './TagPicker'
 import MarkdownEditor from './MarkdownEditor'
 import SubtaskEditor from './SubtaskEditor'
 import PostponeModal from './PostponeModal'
+import TagBadgeList from './TagBadge'
 
 interface DayViewProps {
   date: string
@@ -16,8 +17,10 @@ interface DayViewProps {
   onSelectTask: (id: string | null) => void
   onDateChange: (date: string) => void
   onTasksChanged: () => void
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
   onGoToTags: () => void
+  /** 数据变更版本号：变化时重新拉取本视图数据（替代原先靠重挂载刷新） */
+  dataVersion?: number
 }
 
 export default function DayView({
@@ -28,10 +31,10 @@ export default function DayView({
   onDateChange,
   onTasksChanged,
   onStatus,
-  onGoToTags
+  onGoToTags,
+  dataVersion = 0
 }: DayViewProps) {
   const [tasks, setTasks] = useState<Task[]>([])
-  const [isRest, setIsRest] = useState(false)
   // 置顶且未完成的便签（显示在任务列表上方）
   const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([])
   // 延期弹窗当前任务（null = 关闭）
@@ -43,7 +46,6 @@ export default function DayView({
   const [editBody, setEditBody] = useState('')
   const [editTags, setEditTags] = useState<string[]>([])
   const [editSubtasks, setEditSubtasks] = useState<Subtask[]>([])
-  const [editNote, setEditNote] = useState('')
 
   const tagMap = new Map(tags.map((t) => [t.id, t]))
 
@@ -66,9 +68,6 @@ export default function DayView({
         onSelectTask(all.length > 0 ? all[0].id : null)
       }
     })
-    window.api.isRest(date).then((r) => {
-      if (!cancelled) setIsRest(r)
-    })
     // 便签与日期无关，每次进入日报重新拉取，保证与便签页状态同步
     window.api.listStickyNotes().then((all) => {
       if (cancelled) return
@@ -78,7 +77,7 @@ export default function DayView({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date])
+  }, [date, dataVersion])
 
   /** 日报便签区：标记完成（从日报消失） */
   async function completeSticky(n: StickyNote): Promise<void> {
@@ -121,19 +120,12 @@ export default function DayView({
     onTasksChanged()
   }
 
-  async function toggleRest(v: boolean): Promise<void> {
-    setIsRest(v)
-    await window.api.setRest(date, v)
-    onStatus(v ? '已标记休息日' : '已取消休息日')
-  }
-
   function openEdit(task: Task): void {
     setEditingTask(task)
     setEditTitle(task.title)
     setEditBody(task.body)
     setEditTags(task.tags)
     setEditSubtasks(task.subtasks ?? [])
-    setEditNote(task.note ?? '')
   }
 
   function cancelEdit(): void {
@@ -143,20 +135,27 @@ export default function DayView({
   async function saveEdit(): Promise<void> {
     if (!editingTask) return
     if (!editTitle.trim()) {
-      onStatus('请填写任务标题')
+      onStatus('请填写任务标题', 'error')
       return
     }
     await window.api.updateTask(date, editingTask.id, {
       title: editTitle.trim(),
       body: editBody,
       tags: editTags,
-      subtasks: editSubtasks,
-      note: editNote
+      subtasks: editSubtasks
     })
     setEditingTask(null)
     onTasksChanged()
     onStatus('已保存（所有天同步）')
     await loadTasks()
+  }
+
+  /** 任务详情底部：独立编辑备注（随任务在所有天共享） */
+  async function updateNote(taskId: string, note: string): Promise<void> {
+    await window.api.updateTask(date, taskId, { note })
+    setTasks((prev) => prev.map((x) => (x.id === taskId ? { ...x, note } : x)))
+    onTasksChanged()
+    onStatus('备注已保存（所有天同步）')
   }
 
   async function delTask(task: Task): Promise<void> {
@@ -184,19 +183,15 @@ export default function DayView({
     <div className="day-view">
       <div className="day-panel">
         <div className="date-heading">
-          <button className="week-nav" onClick={() => shiftDate(-1)} title="前一天">
+          <button className="week-nav" onClick={() => shiftDate(-1)} title="前一天" aria-label="前一天">
             ‹
           </button>
           <DatePicker value={date} onChange={onDateChange} title="选择日期" />
-          <button className="week-nav" onClick={() => shiftDate(1)} title="后一天">
+          <button className="week-nav" onClick={() => shiftDate(1)} title="后一天" aria-label="后一天">
             ›
           </button>
           <span className="weekday">{weekdayOf(date)}</span>
           {tasks.length > 0 ? <span className="badge">已记录</span> : <span className="badge new">未填写</span>}
-          <label className="rest-toggle" title="标记为休息日">
-            <input type="checkbox" checked={isRest} onChange={(e) => toggleRest(e.target.checked)} />
-            休息日
-          </label>
         </div>
         <div className="day-columns">
           <div className="day-list">
@@ -254,15 +249,7 @@ export default function DayView({
                       {t.title || '（未命名）'}
                     </span>
                     <span className="task-item-tags">
-                      {t.tags.map((id) => {
-                        const tag = tagMap.get(id)
-                        if (!tag) return null
-                        return (
-                          <span key={id} className="task-item-tag" style={{ borderColor: tag.color, color: tag.color }}>
-                            {tag.name}
-                          </span>
-                        )
-                      })}
+                      <TagBadgeList ids={t.tags} tagMap={tagMap} />
                     </span>
                   </div>
                   {(t.subtasks ?? []).length > 0 && (
@@ -308,10 +295,10 @@ export default function DayView({
                       autoFocus
                       onChange={(e) => setEditTitle(e.target.value)}
                     />
-                    <button className="icon-btn primary" onClick={saveEdit} title="保存（所有天同步）">
+                    <button className="icon-btn primary" onClick={saveEdit} title="保存（所有天同步）" aria-label="保存（所有天同步）">
                       <Save size={15} />
                     </button>
-                    <button className="icon-btn" onClick={cancelEdit} title="取消">
+                    <button className="icon-btn" onClick={cancelEdit} title="取消" aria-label="取消">
                       <X size={15} />
                     </button>
                   </div>
@@ -323,18 +310,6 @@ export default function DayView({
                   />
                   <div className="subtask-editor">
                     <SubtaskEditor subtasks={editSubtasks} tags={tags} onChange={setEditSubtasks} />
-                  </div>
-                  <div className="task-note">
-                    <div className="task-note-label">
-                      <StickyNoteIcon size={13} />
-                      备注
-                    </div>
-                    <textarea
-                      className="task-note-input"
-                      placeholder="给这个任务简单备注…（保存后随任务在所有天共享）"
-                      value={editNote}
-                      onChange={(e) => setEditNote(e.target.value)}
-                    />
                   </div>
                   <div className="publish-body">
                     <MarkdownEditor
@@ -348,11 +323,11 @@ export default function DayView({
               ) : (
                 <TaskDetail
                   task={selected}
-                  date={date}
                   tags={tags}
                   onEdit={() => openEdit(selected)}
                   onDelete={() => delTask(selected)}
                   onPostpone={() => setPostponeTask(selected)}
+                  onUpdateNote={(note) => updateNote(selected.id, note)}
                 />
               )
             ) : (

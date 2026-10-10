@@ -200,3 +200,21 @@ export interface StickyNote {
   createdAt: string       // 创建时间 ISO
   completedAt: string | null // 完成时间 ISO（未完成 null）
 }
+
+// ==================== 数据层告警类型定义 ====================
+
+export type DataWarningKind = 'corrupt' | 'write-failed'
+
+/**
+ * 数据层告警：由主进程经 `data:warning` 通道推送到渲染层，让用户知道
+ * 「有文件损坏已被隔离备份」这类原本会被静默吞掉的问题。
+ */
+export interface DataWarning {
+  kind: DataWarningKind
+  /** 出错的文件绝对路径 */
+  file: string
+  /** 面向用户的中文说明 */
+  message: string
+  /** 损坏文件被改名隔离后的新路径（仅 kind === 'corrupt'） */
+  quarantine?: string
+}

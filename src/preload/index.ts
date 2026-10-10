@@ -15,7 +15,8 @@ import type {
   UpdateSource,
   WeekInfo,
   WeeklySummary,
-  AttachmentMeta
+  AttachmentMeta,
+  DataWarning
 } from '../shared/types'
 
 export type WorkLogApi = {
@@ -45,8 +46,6 @@ export type WorkLogApi = {
   readWeeklySummary: (weekKey: string) => Promise<WeeklySummary>
   writeWeeklySummary: (weekKey: string, summary: string) => Promise<{ ok: boolean }>
   shiftWeekKey: (weekKey: string, delta: number) => Promise<string | null>
-  isRest: (date: string) => Promise<boolean>
-  setRest: (date: string, rest: boolean) => Promise<{ ok: boolean }>
   getSettings: () => Promise<AppSettings>
   setSettings: (s: AppSettings) => Promise<void>
   searchTasks: (query: string) => Promise<SearchHit[]>
@@ -76,11 +75,14 @@ export type WorkLogApi = {
   getAppInfo: () => Promise<{ appVersion: string; electron: string; chrome: string; node: string; platform: string; arch: string; packaged: boolean }>
   checkUpdate: () => Promise<{ ok: boolean; message?: string }>
   downloadUpdate: () => Promise<{ ok: boolean; message?: string }>
+  cancelUpdate: () => Promise<{ ok: boolean }>
   installUpdate: () => Promise<{ ok: boolean }>
   setUpdateSource: (source: UpdateSource) => Promise<{ ok: boolean }>
   exportReportMd: (md: string, defaultName: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
   exportReportWord: (html: string, defaultName: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
   onUpdateEvent: (cb: (data: { channel: string; payload: Record<string, unknown> }) => void) => () => void
+  /** 数据层告警（文件损坏被隔离 / 写盘失败 / 回收站超限），返回取消订阅 */
+  onDataWarning: (cb: (w: DataWarning) => void) => () => void
 }
 
 const api: WorkLogApi = {
@@ -145,10 +147,7 @@ const api: WorkLogApi = {
   shiftWeekKey: (weekKey: string, delta: number): Promise<string | null> =>
     ipcRenderer.invoke('weekly:shift', weekKey, delta),
 
-  // ---- 休息日 / 设置 ----
-  isRest: (date: string): Promise<boolean> => ipcRenderer.invoke('rest:get', date),
-  setRest: (date: string, rest: boolean): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke('rest:set', date, rest),
+  // ---- 设置 ----
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
   setSettings: (s: AppSettings): Promise<void> => ipcRenderer.invoke('settings:set', s),
 
@@ -239,6 +238,7 @@ const api: WorkLogApi = {
     ipcRenderer.invoke('update:check'),
   downloadUpdate: (): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke('update:download'),
+  cancelUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:cancel'),
   installUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('update:install'),
   setUpdateSource: (source: UpdateSource): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('update:set-source', source),
@@ -261,6 +261,11 @@ const api: WorkLogApi = {
       cb(data)
     ipcRenderer.on('update:event', handler)
     return () => ipcRenderer.removeListener('update:event', handler)
+  },
+  onDataWarning: (cb: (w: DataWarning) => void): (() => void) => {
+    const handler = (_e: unknown, w: DataWarning): void => cb(w)
+    ipcRenderer.on('data:warning', handler)
+    return () => ipcRenderer.removeListener('data:warning', handler)
   }
 }
 

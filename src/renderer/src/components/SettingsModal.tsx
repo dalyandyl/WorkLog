@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BookOpenText, RefreshCw } from 'lucide-react'
-import type { AccentColor, AppSettings } from '../types'
+import type { AccentColor, AppSettings, StatusReporter } from '../types'
 import DropdownSelect from './DropdownSelect'
 import Modal from './Modal'
 
@@ -9,7 +9,7 @@ interface SettingsModalProps {
   settings: AppSettings
   onChange: (s: AppSettings) => void
   onClose: () => void
-  onStatus: (msg: string) => void
+  onStatus: StatusReporter
 }
 
 type Tab = 'theme' | 'reminder' | 'backup' | 'sync' | 'about'
@@ -84,6 +84,11 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
         setUpdText(`新版本 v${p.version} 已下载，请重启安装`)
         setUpdStatus('downloaded')
         setChecking(false)
+      } else if (channel === 'cancelled') {
+        setUpdText('下载已取消')
+        setUpdStatus('available')
+        setUpdPercent(undefined)
+        setChecking(false)
       } else if (channel === 'error') {
         setUpdText(`更新出错：${String(p.message ?? '')}`)
         setUpdStatus('error')
@@ -109,16 +114,16 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
   async function doBackup(): Promise<void> {
     const r = await window.api.backupExport()
     if (r.ok) onStatus('备份已导出：' + r.path)
-    else if (!r.canceled) onStatus('备份失败：' + (r.error || '未知错误'))
+    else if (!r.canceled) onStatus('备份失败：' + (r.error || '未知错误'), 'error')
   }
   async function doRestore(): Promise<void> {
     const r = await window.api.backupImport()
     if (r.ok) onStatus('备份已导入')
-    else if (!r.canceled) onStatus('导入失败：' + (r.error || '未知错误'))
+    else if (!r.canceled) onStatus('导入失败：' + (r.error || '未知错误'), 'error')
   }
   async function doSyncPush(): Promise<void> {
     const r = await window.api.syncPush()
-    onStatus(r.ok ? '已上传到云端' : '上传失败：' + (r.error || '未知错误'))
+    onStatus(r.ok ? '已上传到云端' : '上传失败：' + (r.error || '未知错误'), r.ok ? 'success' : 'error')
   }
   async function doSyncPull(): Promise<void> {
     // 冲突提示：本地有比最近同步更新的改动时先确认
@@ -128,7 +133,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
       if (!window.confirm('本地有未同步到云端的改动，从云端下载可能被合并覆盖，是否继续？')) return
     }
     const r = await window.api.syncPull()
-    onStatus(r.ok ? '已从云端下载合并' : '下载失败：' + (r.error || '未知错误'))
+    onStatus(r.ok ? '已从云端下载合并' : '下载失败：' + (r.error || '未知错误'), r.ok ? 'success' : 'error')
   }
   async function check(): Promise<void> {
     setChecking(true)
@@ -158,6 +163,9 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
   }
   function install(): void {
     void window.api.installUpdate()
+  }
+  function cancelDownload(): void {
+    void window.api.cancelUpdate()
   }
 
   return (
@@ -218,7 +226,7 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
           {tab === 'reminder' && (
             <div className="settings-tab">
               <h4>每日提醒</h4>
-              <label className="rest-toggle">
+              <label className="toggle-row">
                 <input
                   type="checkbox"
                   checked={settings.reminder.enabled}
@@ -256,8 +264,8 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
             <div className="settings-tab">
               <h4>跨设备同步（WebDAV）</h4>
               <div className="settings-row">
-                <button className="settings-btn" onClick={doSyncPush} title="把本地数据打包上传到云端">上传到云端</button>
-                <button className="settings-btn" onClick={doSyncPull} title="从云端下载并合并到本地">从云端下载</button>
+                <button className="settings-btn" onClick={doSyncPush} title="把本地数据打包上传到云端" aria-label="把本地数据打包上传到云端">上传到云端</button>
+                <button className="settings-btn" onClick={doSyncPull} title="从云端下载并合并到本地" aria-label="从云端下载并合并到本地">从云端下载</button>
                 <button className="settings-btn small" onClick={() => setShowWebdav((v) => !v)}>
                   {showWebdav ? '收起配置' : '配置'}
                 </button>
@@ -362,6 +370,11 @@ export default function SettingsModal({ open, settings, onChange, onClose, onSta
                   )}
                   {updStatus === 'downloaded' && (
                     <button className="ghost-btn" onClick={install}>立即重启安装</button>
+                  )}
+                  {updStatus === 'progress' && (
+                    <button className="ghost-btn" onClick={cancelDownload}>
+                      取消下载
+                    </button>
                   )}
                 </div>
                 {updText && (

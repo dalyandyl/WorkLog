@@ -1,29 +1,24 @@
-import { promises as fs } from 'fs'
-import path from 'path'
 import type { Tag } from '../shared/types'
 import { listDatesWithTasks, readTasks, removeTagFromAllTasks } from './tasks'
+import { readJson, writeJson, withDataLock } from './jsonStore'
+import { tagsPath } from './paths'
 
 export type { Tag }
+export { tagsPath }
 
-export function tagsPath(root: string): string {
-  return path.join(root, 'tags.json')
-}
-
+/**
+ * 读取标签库。
+ * 损坏/截断的 tags.json 会被隔离备份并由 jsonStore 发告警，而不是静默当空。
+ */
 export async function readTags(root: string): Promise<Tag[]> {
-  try {
-    const raw = await fs.readFile(tagsPath(root), 'utf-8')
-    const data = JSON.parse(raw)
-    const tags = Array.isArray(data) ? (data as Tag[]) : []
-    // 兼容旧数据：补 createdAt
-    return tags.map((t) => ({ ...t, createdAt: t.createdAt || new Date(0).toISOString() }))
-  } catch {
-    return []
-  }
+  const data = await readJson<unknown>(tagsPath(root), [])
+  const tags = Array.isArray(data) ? (data as Tag[]) : []
+  // 兼容旧数据：补 createdAt
+  return tags.map((t) => ({ ...t, createdAt: t.createdAt || new Date(0).toISOString() }))
 }
 
 async function writeTags(root: string, tags: Tag[]): Promise<void> {
-  await fs.mkdir(path.dirname(tagsPath(root)), { recursive: true })
-  await fs.writeFile(tagsPath(root), JSON.stringify(tags, null, 2), 'utf-8')
+  await writeJson(tagsPath(root), tags)
 }
 
 /** 统计每个标签在任务与子任务中的使用次数 */
@@ -51,13 +46,20 @@ export async function listTags(root: string): Promise<Tag[]> {
 }
 
 export async function createTag(root: string, name: string, color: string): Promise<Tag | null> {
-  const tags = await readTags(root)
-  const n = name.trim()
-  if (tags.some((t) => t.name === n)) return null // 不允许重名
-  const tag: Tag = { id: crypto.randomUUID(), name: n, color, createdAt: new Date().toISOString() }
-  tags.push(tag)
-  await writeTags(root, tags)
-  return tag
+  return withDataLock(async () => {
+    const tags = await readTags(root)
+    const n = name.trim()
+    if (tags.some((t) => t.name === n)) return null // 不允许重名
+    const tag: Tag = {
+      id: crypto.randomUUID(),
+      name: n,
+      color,
+      createdAt: new Date().toISOString()
+    }
+    tags.push(tag)
+    await writeTags(root, tags)
+    return tag
+  })
 }
 
 /** 重命名：任务里存的是标签 id，改名自动生效；不允许与其他标签重名 */
@@ -66,14 +68,16 @@ export async function renameTag(
   id: string,
   name: string
 ): Promise<Tag | null> {
-  const tags = await readTags(root)
-  const tag = tags.find((t) => t.id === id)
-  if (!tag) return null
-  const n = name.trim()
-  if (tags.some((t) => t.id !== id && t.name === n)) return null
-  tag.name = n
-  await writeTags(root, tags)
-  return tag
+  return withDataLock(async () => {
+    const tags = await readTags(root)
+    const tag = tags.find((t) => t.id === id)
+    if (!tag) return null
+    const n = name.trim()
+    if (tags.some((t) => t.id !== id && t.name === n)) return null
+    tag.name = n
+    await writeTags(root, tags)
+    return tag
+  })
 }
 
 export async function recolorTag(
@@ -81,20 +85,32 @@ export async function recolorTag(
   id: string,
   color: string
 ): Promise<Tag | null> {
-  const tags = await readTags(root)
-  const tag = tags.find((t) => t.id === id)
-  if (!tag) return null
-  tag.color = color
-  await writeTags(root, tags)
-  return tag
+  return withDataLock(async () => {
+    const tags = await readTags(root)
+    const tag = tags.find((t) => t.id === id)
+    if (!tag) return null
+    tag.color = color
+    await writeTags(root, tags)
+    return tag
+  })
 }
 
-/** 删除标签：同时从所有任务的标签引用中移除 */
+/**
+ * 删除标签：同时从所有任务的标签引用中移除。
+ *
+ * 注意：**不能**把两步包在同一个 withDataLock 里 —— 写锁不可重入，
+ * `removeTagFromAllTasks` 内部自己会加锁，嵌套会死锁。两步各自加锁即可：
+ * 即便中间失败，最坏结果是留下无害的孤儿标签引用（界面上不显示标签名）。
+ */
 export async function deleteTag(root: string, id: string): Promise<{ ok: boolean }> {
-  const tags = await readTags(root)
-  const next = tags.filter((t) => t.id !== id)
-  if (next.length === tags.length) return { ok: false }
-  await writeTags(root, next)
+  const removed = await withDataLock(async () => {
+    const tags = await readTags(root)
+    const next = tags.filter((t) => t.id !== id)
+    if (next.length === tags.length) return false
+    await writeTags(root, next)
+    return true
+  })
+  if (!removed) return { ok: false }
   await removeTagFromAllTasks(root, id)
   return { ok: true }
 }
