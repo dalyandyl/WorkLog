@@ -171,8 +171,32 @@ contextBridge.exposeInMainWorld('api', {
   getMockSaves: async () => mockSaves,
 
   // ---- 其余（截某一页时用不到，给安全的空实现）----
-  searchTasks: async () => [],
-  searchAll: async () => [],
+  // ---- 搜索（用于验证「搜索命中日志 → 跳到日志页那一天」这条路径）----
+  searchTasks: async () => [
+    {
+      date: '2026-10-07',
+      kind: 'task',
+      taskId: 't9',
+      title: '买苹果派原料',
+      snippet: '…苹果派…'
+    }
+  ],
+  searchAll: async () => [
+    {
+      date: '2026-10-07',
+      kind: 'task',
+      taskId: 't9',
+      title: '买苹果派原料',
+      snippet: '…苹果派…'
+    },
+    {
+      date: '2026-10-06',
+      kind: 'journal',
+      taskId: '',
+      title: '日志',
+      snippet: '…记一下苹果派的做法…'
+    }
+  ],
   rangeStats: async () => ({}),
   listPublishHistory: async () => [],
   deletePublishRecord: async () => ({ ok: true }),

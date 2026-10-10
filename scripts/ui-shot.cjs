@@ -212,6 +212,25 @@ app.whenReady().then(async () => {
     log(`点击「${WANT_VIEW}」: ${clicked}`)
     await new Promise((r) => setTimeout(r, 2200))
 
+    // WL_MOCK_SEARCH=关键字：往顶部搜索框里真的输入，用于驱动「搜索 → 命中 → 跳转」这条路径。
+    // 必须走真正的 input 事件（execCommand insertText）—— 直接改 .value 不会触发 React 的 onChange。
+    if (process.env.WL_MOCK_SEARCH) {
+      const typed = await win.webContents.executeJavaScript(`(() => {
+        const el = document.querySelector('.search-input')
+        if (!el) return 'no-search-input'
+        el.focus()
+        document.execCommand('insertText', false, ${JSON.stringify(process.env.WL_MOCK_SEARCH)})
+        return 'value=' + el.value + ' hits=' + document.querySelectorAll('.search-hit').length
+      })()`)
+      log('搜索输入: ' + typed)
+      await new Promise((r) => setTimeout(r, 900))
+      const hits = await win.webContents.executeJavaScript(`(() => ({
+        count: document.querySelectorAll('.search-hit').length,
+        texts: [...document.querySelectorAll('.search-hit')].map(b => (b.textContent||'').trim().slice(0, 30))
+      }))()`)
+      log('搜索命中: ' + JSON.stringify(hits))
+    }
+
     // 支持多步点击：用 | 分隔；每步可写成 `选择器::文字`（在该选择器范围内找按钮）。
     // 例：npm run ui:shot -- 日志 out/p.png "选择日期|.dp-pop::15"
     for (const spec of CLICK_SPECS) {
@@ -242,6 +261,11 @@ app.whenReady().then(async () => {
       const days = [...document.querySelectorAll('.journal-day')]
       const cs = (s, prop) => { const el = q(s); return el ? getComputedStyle(el)[prop] : null }
       return {
+        /** 当前激活的左侧导航项 —— 用于验证「跳转到别的页」是否生效 */
+        activeNav: (() => {
+          const el = document.querySelector('.nav-btn.active')
+          return el ? el.textContent.trim() : null
+        })(),
         journal: {
           view: !!q('.journal-view'),
           dayCount: days.length,
