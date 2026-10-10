@@ -6,9 +6,9 @@
  * 再用肉眼 / 像素分析来验证（"先测不猜"）。
  *
  * 用法：
- *   npm run ui:shot              # 默认截「日志」页
- *   npm run ui:shot -- 任务      # 截任意导航页（按左侧导航文字匹配）
- *   npm run ui:shot -- 日志 out.png
+ *   npm run ui:shot                          # 默认截「日志」页
+ *   npm run ui:shot -- 任务                  # 截任意导航页（按左侧导航文字匹配）
+ *   npm run ui:shot -- 会议 out/m.png 新建会议   # 切到该页后再点一个按钮（按文字匹配）
  *
  * 产物：
  *   out/ui-shot.png    截图
@@ -27,6 +27,8 @@ const RENDERER = path.join(ROOT, 'out', 'renderer')
 
 const argv = process.argv.slice(2).filter((a) => !a.startsWith('-'))
 const WANT_VIEW = argv[0] || '日志'
+/** 切到目标页后，再点一个按钮（按可见文字包含匹配），用于打开弹窗/编辑器 */
+const CLICK_TEXT = argv[2] || ''
 // 产物写进 out/（已被 .gitignore 忽略），避免污染工作区
 const OUT_PNG = path.resolve(ROOT, argv[1] || path.join('out', 'ui-shot.png'))
 const OUT_JSON = path.join(ROOT, 'out', 'ui-shot.json')
@@ -207,6 +209,18 @@ app.whenReady().then(async () => {
     log(`点击「${WANT_VIEW}」: ${clicked}`)
     await new Promise((r) => setTimeout(r, 2200))
 
+    if (CLICK_TEXT) {
+      const r = await win.webContents.executeJavaScript(`(() => {
+        const els = [...document.querySelectorAll('button')]
+        const t = els.find(b => (b.textContent || '').includes(${JSON.stringify(CLICK_TEXT)}))
+        if (!t) return 'not-found'
+        t.click()
+        return 'clicked'
+      })()`)
+      log(`再点击包含「${CLICK_TEXT}」的按钮: ${r}`)
+      await new Promise((r2) => setTimeout(r2, 2200))
+    }
+
     const dom = await win.webContents.executeJavaScript(`(() => {
       const q = (s) => document.querySelector(s)
       const days = [...document.querySelectorAll('.journal-day')]
@@ -224,11 +238,40 @@ app.whenReady().then(async () => {
           toolbarButtons: document.querySelectorAll('.journal-doc .toolbar-btn').length,
           proseMirror: !!q('.journal-doc .rich-editor-content .ProseMirror'),
           mountedChips: document.querySelectorAll('.journal-mounted-item').length
-        }
+        },
+        // 【共用编辑器回归检查】会议纪要等页面用的是同一个 RichTextEditor，
+        // 必须仍是"盒子式"（有边框、14px），不能被日志的纸张化样式污染。
+        sharedEditor: (() => {
+          const w = [...document.querySelectorAll('.editor-wrapper')].find(e => !e.closest('.journal-doc'))
+          if (!w) return null
+          const content = w.querySelector('.rich-editor-content')
+          const c = content ? getComputedStyle(content) : null
+          const ws = getComputedStyle(w)
+          return {
+            found: true,
+            inDialog: !!w.closest('[role="dialog"]'),
+            borderTopWidth: ws.borderTopWidth,
+            borderRadius: ws.borderTopLeftRadius,
+            fontSize: c ? c.fontSize : null,
+            minHeight: c ? c.minHeight : null,
+            toolbarButtons: w.querySelectorAll('.toolbar-btn').length
+          }
+        })()
       }
     })()`)
     log('页面结构: ' + JSON.stringify(dom, null, 2))
     if (consoleMsgs.length) log('渲染层控制台:\n  ' + consoleMsgs.join('\n  '))
+
+    // ⚠️ 截图前必须关掉动画/过渡：
+    // 窗口是隐藏的（show:false），Chromium 不推进动画时钟，于是带入场动画的元素
+    // （弹窗/抽屉 .wl-modal 用 wl-pop-in，keyframes 的 from 是 opacity:0）
+    // 会**永远停在第一帧**，截出来就是"元素在 DOM 里但画面里没有"。
+    // 实测：不关动画时「新建会议纪要」弹窗的 .editor-wrapper 在 DOM 中存在（inDialog:true）
+    // 却完全不出现在截图里。关掉动画后元素回到自身基础样式，稳定可见。
+    await win.webContents.insertCSS(
+      '*, *::before, *::after { animation: none !important; transition: none !important; }'
+    )
+    await new Promise((r) => setTimeout(r, 300))
 
     const img = await win.webContents.capturePage()
     fs.writeFileSync(OUT_PNG, img.toPNG())
