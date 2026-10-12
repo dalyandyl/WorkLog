@@ -55,8 +55,20 @@
 
 **遗留 / 待办**
 
-- 过渡版尚未发布（本条目写下时正在准备）。
-- 两个远端的 `master` 也需要一起回退（用户已确认）。
+- ✅ 过渡版**已发布**：`1.5.5-beta1`（提交 `42974aa`、附注标签 `v1.5.5-beta1`）。
+  Gitee 发行版 id=1199658、GitHub id=410367664，两端 `releases/latest` 都返回
+  `v1.5.5-beta1` 且 `prerelease=false`，`latest.yml` 的 version 也是 `1.5.5-beta1`；
+  用项目自带 semver 实测 `gt('1.5.5-beta1','1.5.4') === true`
+  → **已经升到 1.5.4 的机器会收到这次更新**（auto / gitee / github 三种源都覆盖）。
+- ✅ 两个远端的 `master` **已 force-push 回退**到 `42974aa`（`3f85a83...42974aa forced update`）；
+  两端 tag 也都指向 `42974aa`（**先推 master 再发布**，避开了 1.5.4 那次 tag 错位）。
+- ⚠️ **诊断工具的坑**：用 Node 的 `fetch` 查 `api.github.com` 会 `fetch failed`，
+  即使该端口完全可达 —— git 用 `http.sslBackend=schannel`（走 Windows 证书库、信任
+  Steam++ 加速器的中间证书），而 **Node/undici 用自带 CA、不信它**。发布脚本用
+  curl.exe / PowerShell（同样走 Windows 证书库）所以能成功。
+  **要核对 GitHub 的 API，请用 curl.exe 或 PowerShell，不要用 Node fetch。**
+- 1.5.4 的发行版仍留在两端（**不删**）：`releases/latest` 现在返回 1.5.5-beta1，
+  不会再有人被引导到 1.5.4；留着可作历史与回滚参考。
 - 用户**没有说明 1.5.4 具体发现了哪些问题** —— 后续若要重新引入上面那些改动，
   应先问清楚，避免把被否决的东西原样再搬回来。
 
