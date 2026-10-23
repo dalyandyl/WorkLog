@@ -107,7 +107,7 @@ export default function PostponeModal({
           </span>
           <p className="postpone-result-msg">{result.msg}</p>
           <div className="postpone-actions">
-            <button className="publish-btn" onClick={finishPostpone}>
+            <button className="btn btn--primary" onClick={finishPostpone}>
               确定
             </button>
           </div>
@@ -133,10 +133,10 @@ export default function PostponeModal({
           <DatePicker value={end} onChange={setEnd} title="延期结束日期" portal />
         </div>
         <div className="postpone-actions">
-          <button className="ghost-btn" onClick={onClose}>
+          <button className="btn" onClick={onClose}>
             取消
           </button>
-          <button className="publish-btn" onClick={() => void confirm()}>
+          <button className="btn btn--primary" onClick={() => void confirm()}>
             <CalendarClock size={14} />
             确认延期
           </button>

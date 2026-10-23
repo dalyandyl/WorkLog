@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { renderMarkdown } from '../utils/markdown'
+import { handleAttachmentClick } from '../utils/attachmentActions'
 
-/** 只读渲染：Markdown -> HTML（补渲染公式、拦截附件点击） */
+/** 只读渲染：Markdown -> HTML（补渲染公式、拦截附件/图片按钮点击） */
 export default function RichView({ content }: { content: string }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -34,12 +35,9 @@ export default function RichView({ content }: { content: string }) {
   }, [renderedHtml])
 
   function onClickCapture(e: React.MouseEvent): void {
-    const target = e.target as HTMLElement
-    const a = target.closest?.('a') as HTMLAnchorElement | null
-    if (a && (a.hasAttribute('data-attachment') || (a.getAttribute('href') ?? '').startsWith('wlattach://'))) {
+    if (handleAttachmentClick(e)) {
       e.preventDefault()
       e.stopPropagation()
-      void window.api.openAttachment(a.getAttribute('href') ?? '')
     }
   }
 

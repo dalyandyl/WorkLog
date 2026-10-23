@@ -163,7 +163,6 @@ export default function MarkdownEditor({
           <Paperclip size={14} />
           附件
         </button>
-        <span className="md-editor-hint">支持 Markdown 语法：**加粗** ~~删除~~ # 标题 · 代码块 · 列表（右键可快速插入）</span>
       </div>
       <textarea
         ref={taRef}

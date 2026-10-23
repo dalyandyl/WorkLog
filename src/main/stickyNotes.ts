@@ -101,3 +101,27 @@ export function deleteStickyNote(root: string, id: string): Promise<{ ok: boolea
     return { ok: true }
   })
 }
+
+/** 从回收站恢复便签：保留原 id / 时间 / 置顶与完成状态 */
+export function restoreStickyNote(root: string, note: StickyNote): Promise<void> {
+  return withNotesLock(async () => {
+    const all = await readJson<StickyNote[]>(notesPath(root), [])
+    const list = Array.isArray(all) ? all : []
+    if (list.some((n) => n.id === note.id)) return
+    list.push(normalize(note))
+    await writeJson(notesPath(root), list)
+  })
+}
+
+/** 取出便签原对象并删掉（给回收站用，不进锁的话会和 delete 抢写） */
+export function takeStickyNote(root: string, id: string): Promise<StickyNote | null> {
+  return withNotesLock(async () => {
+    const all = await readJson<StickyNote[]>(notesPath(root), [])
+    const list = Array.isArray(all) ? all : []
+    const idx = list.findIndex((n) => n.id === id)
+    if (idx === -1) return null
+    const [note] = list.splice(idx, 1)
+    await writeJson(notesPath(root), list)
+    return normalize(note)
+  })
+}

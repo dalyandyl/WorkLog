@@ -10,7 +10,6 @@ import { createLowlight, common } from 'lowlight'
 import { Highlight } from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
-import { Image } from '@tiptap/extension-image'
 import {
   FolderOpen,
   Highlighter,
@@ -23,6 +22,9 @@ import {
 import type { AttachmentMeta, Meeting, Tag } from '../types'
 import TagPicker from './TagPicker'
 import DatePicker from './DatePicker'
+import AttachmentCard from './AttachmentNode'
+import ImageWithRemove from './ImageNode'
+import { handleAttachmentClick, handleAttachmentKey } from '../utils/attachmentActions'
 
 const lowlight = createLowlight(common)
 
@@ -70,7 +72,9 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
           Highlight,
           TextStyle,
           Color,
-          Image.configure({ allowBase64: false })
+          ImageWithRemove.configure({ allowBase64: false }),
+          // 附件以卡片节点呈现（点卡片上的按钮即可预览 / 下载 / 定位）
+          AttachmentCard
         ],
         content: bodyHtml,
         onUpdate: ({ editor }) => {
@@ -115,26 +119,34 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
       if (!r.canceled && r.error) onStatus?.('附件添加失败：' + r.error)
       return
     }
-    const links = r.files.map((f) => `<a href="${f.url}">📎 ${f.name}</a>`).join(' ')
+    const links: { type: string; attrs?: Record<string, unknown>; text?: string }[] = []
+    r.files.forEach((f, i) => {
+      if (i > 0) links.push({ type: 'text', text: ' ' })
+      links.push({ type: 'attachment', attrs: { url: f.url, name: f.name } })
+    })
     setAttachments((prev) => [
       ...prev,
       ...r.files!.map((f) => ({ id: crypto.randomUUID(), name: f.name, url: f.url, type: 'file' as const }))
     ])
-    insertHtml(links + ' ')
+    editorInstanceRef.current?.chain().focus().insertContent(links).run()
+    setBodyHtml(editorInstanceRef.current?.getHTML() ?? bodyHtml)
     onStatus?.(`已添加 ${r.files.length} 个附件`)
   }
 
   function removeAttachment(att: AttachmentMeta): void {
     setAttachments((prev) => prev.filter((a) => a.id !== att.id))
     void window.api.deleteAttachment(att.url)
-    // 同时从正文移除对应引用（<img> 或 <a>）
+    // 同时从正文移除对应引用（图片 / 附件卡片 / 旧版链接）
     const editor = editorInstanceRef.current
     if (!editor) return
-    const escaped = att.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    let html = editor.getHTML()
-    html = html
-      .replace(new RegExp(`<img[^>]*src=["']${escaped}["'][^>]*>`, 'g'), '')
-      .replace(new RegExp(`<a[^>]*href=["']${escaped}["'][^>]*>.*?<\\/a>`, 'g'), '')
+    const container = document.createElement('div')
+    container.innerHTML = editor.getHTML()
+    container.querySelectorAll('[data-attach-url], img, a').forEach((el) => {
+      const url =
+        el.getAttribute('data-attach-url') ?? el.getAttribute('src') ?? el.getAttribute('href') ?? ''
+      if (url === att.url) el.remove()
+    })
+    const html = container.innerHTML
     editor.chain().focus().setContent(html, { emitUpdate: false }).run()
     setBodyHtml(html)
   }
@@ -258,7 +270,21 @@ export default function MeetingEditor({ tags, meeting, onSave, onClose, onStatus
       </div>
 
       {/* 富文本编辑器 */}
-      <div className="editor-wrapper">
+      <div
+        className="editor-wrapper"
+        onClickCapture={(e) => {
+          if (handleAttachmentClick(e, onStatus)) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }}
+        onKeyDownCapture={(e) => {
+          if (handleAttachmentKey(e, onStatus)) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }}
+      >
         <div className="editor-toolbar">
           <button className="toolbar-btn" onClick={toggleBold} title="加粗"><b>B</b></button>
           <button className="toolbar-btn" onClick={toggleItalic} title="斜体"><i>I</i></button>

@@ -3,6 +3,8 @@ import type {
   AppSettings,
   ExportOptions,
   Meeting,
+  MomProFeature,
+  MomProFeatureInput,
   MonthStats,
   NewTaskInput,
   PublishRecord,
@@ -20,6 +22,12 @@ import type {
 
 export type WorkLogApi = {
   getStorageRoot: () => Promise<string>
+  // 窗口控制（无边框自绘标题栏）
+  winMinimize: () => Promise<void>
+  winToggleMaximize: () => Promise<boolean>
+  winClose: () => Promise<void>
+  isWindowMaximized: () => Promise<boolean>
+  onWindowMaximized: (cb: (maximized: boolean) => void) => () => void
   readTasks: (date: string) => Promise<Task[]>
   readTasksMany: (dates: string[]) => Promise<Record<string, Task[]>>
   listTaskDates: () => Promise<string[]>
@@ -63,6 +71,8 @@ export type WorkLogApi = {
   saveAttachmentImage: (folder: string, name: string, buf: ArrayBuffer) => Promise<string>
   pickAttachmentFiles: (folder: string) => Promise<{ ok: boolean; canceled?: boolean; files?: { url: string; name: string }[]; error?: string }>
   openAttachment: (url: string) => Promise<{ ok: boolean; error?: string }>
+  downloadAttachment: (url: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
+  revealAttachment: (url: string) => Promise<{ ok: boolean; error?: string }>
   deleteAttachment: (url: string) => Promise<{ ok: boolean; error?: string }>
   listMeetings: () => Promise<Meeting[]>
   saveMeeting: (meeting: Meeting) => Promise<{ ok: boolean }>
@@ -73,6 +83,11 @@ export type WorkLogApi = {
   addStickyNote: (text: string) => Promise<StickyNote>
   updateStickyNote: (id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) => Promise<StickyNote | null>
   deleteStickyNote: (id: string) => Promise<{ ok: boolean }>
+  listMomProFeatures: () => Promise<MomProFeature[]>
+  listMomProPlugins: () => Promise<string[]>
+  createMomProFeature: (input: MomProFeatureInput) => Promise<MomProFeature>
+  updateMomProFeature: (id: string, input: MomProFeatureInput) => Promise<MomProFeature | null>
+  deleteMomProFeature: (id: string) => Promise<{ ok: boolean }>
   getAppInfo: () => Promise<{ appVersion: string; electron: string; chrome: string; node: string; platform: string; arch: string; packaged: boolean }>
   checkUpdate: () => Promise<{ ok: boolean; message?: string }>
   downloadUpdate: () => Promise<{ ok: boolean; message?: string }>
@@ -85,6 +100,17 @@ export type WorkLogApi = {
 
 const api: WorkLogApi = {
   getStorageRoot: (): Promise<string> => ipcRenderer.invoke('storage:root'),
+
+  // ---- 窗口控制（无边框自绘标题栏）----
+  winMinimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+  winToggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-maximize'),
+  winClose: (): Promise<void> => ipcRenderer.invoke('window:close'),
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
+  onWindowMaximized: (cb: (maximized: boolean) => void): (() => void) => {
+    const handler = (_e: unknown, maximized: boolean): void => cb(maximized)
+    ipcRenderer.on('window:maximized', handler)
+    return () => ipcRenderer.removeListener('window:maximized', handler)
+  },
 
   // ---- 任务 ----
   readTasks: (date: string): Promise<Task[]> => ipcRenderer.invoke('tasks:read', date),
@@ -200,6 +226,12 @@ const api: WorkLogApi = {
   }> => ipcRenderer.invoke('attach:pickFile', folder),
   openAttachment: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('attach:open', url),
+  downloadAttachment: (
+    url: string
+  ): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('attach:download', url),
+  revealAttachment: (url: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('attach:reveal', url),
   deleteAttachment: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('attach:delete', url),
 
@@ -224,6 +256,18 @@ const api: WorkLogApi = {
   ): Promise<StickyNote | null> => ipcRenderer.invoke('sticky:update', id, patch),
   deleteStickyNote: (id: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('sticky:delete', id),
+
+  // ---- 功能台账（MomPro 表单/事务）----
+  listMomProFeatures: (): Promise<MomProFeature[]> => ipcRenderer.invoke('mompro:list'),
+  listMomProPlugins: (): Promise<string[]> => ipcRenderer.invoke('mompro:plugins'),
+  createMomProFeature: (input: MomProFeatureInput): Promise<MomProFeature> =>
+    ipcRenderer.invoke('mompro:create', input),
+  updateMomProFeature: (
+    id: string,
+    input: MomProFeatureInput
+  ): Promise<MomProFeature | null> => ipcRenderer.invoke('mompro:update', id, input),
+  deleteMomProFeature: (id: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('mompro:delete', id),
 
   // ---- 系统信息 / 自动更新 ----
   getAppInfo: (): Promise<{

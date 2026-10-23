@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Search } from 'lucide-react'
 import type { SearchHit } from '../types'
 
 interface SearchBoxProps {
@@ -45,6 +46,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
 
   return (
     <div className="search-wrap" ref={rootRef}>
+      <Search size={15} className="search-icon" />
       <input
         className="search-input"
         placeholder="搜索任务..."

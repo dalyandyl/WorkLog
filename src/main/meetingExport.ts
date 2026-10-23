@@ -1,6 +1,7 @@
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
 import type { Meeting } from '../shared/types'
+import { attachmentDisplayName } from '../shared/attachment'
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -19,6 +20,23 @@ turndown.addRule('u', { filter: 'u', replacement: (content) => content })
 turndown.addRule('strikethrough', {
   filter: ['del', 's', 'strike'],
   replacement: (content) => '~~' + content + '~~'
+})
+
+// 附件卡片 -> Markdown 链接（卡片里的按钮文字不参与导出）
+// 注意：主进程侧没有 DOM 类型，这里用结构化类型断言
+interface TurndownNode {
+  hasAttribute(name: string): boolean
+  getAttribute(name: string): string | null
+}
+
+turndown.addRule('wlAttachment', {
+  filter: (node) => (node as unknown as TurndownNode).hasAttribute('data-attach-url'),
+  replacement: (_content, node) => {
+    const el = node as unknown as TurndownNode
+    const url = el.getAttribute('data-attach-url') ?? ''
+    if (!url) return ''
+    return `[📎 ${attachmentDisplayName(url, el.getAttribute('data-attach-name'))}](${url})`
+  }
 })
 
 /** 把 wlattach:// 绝对链接改写成相对路径，便于导出文件在外部查看 */

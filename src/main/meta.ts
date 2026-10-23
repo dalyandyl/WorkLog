@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import type { AppSettings } from '../shared/types'
+import type { AppSettings, ThemeSetting } from '../shared/types'
 
 export type { AppSettings }
 
@@ -17,8 +17,9 @@ export function settingsPath(root: string): string {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'system',
+  theme: 'aurora',
   accent: 'blue',
+  glass: 'normal',
   reminder: { enabled: false, time: '18:00' },
   webdav: {
     enabled: false,
@@ -29,7 +30,17 @@ const DEFAULT_SETTINGS: AppSettings = {
     intervalMinutes: 30,
     lastSyncAt: null
   },
-  updateSource: 'auto'
+  updateSource: 'auto',
+  momproAccess: false
+}
+
+const THEME_VALUES: ThemeSetting[] = ['aurora', 'graphite', 'amber', 'deep', 'light']
+
+/** 兼容 1.5.3 的 theme 取值：dark/system → 极光玻璃（默认深色主题），其余回落到默认值 */
+function normalizeTheme(v: unknown): ThemeSetting {
+  if (typeof v === 'string' && (THEME_VALUES as string[]).includes(v)) return v as ThemeSetting
+  if (v === 'light') return 'light'
+  return DEFAULT_SETTINGS.theme
 }
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
@@ -49,8 +60,9 @@ async function writeJson(file: string, data: unknown): Promise<void> {
 export async function readSettings(root: string): Promise<AppSettings> {
   const s = await readJson<Partial<AppSettings>>(settingsPath(root), {})
   return {
-    theme: s.theme ?? DEFAULT_SETTINGS.theme,
+    theme: normalizeTheme(s.theme),
     accent: s.accent ?? DEFAULT_SETTINGS.accent,
+    glass: s.glass ?? DEFAULT_SETTINGS.glass,
     reminder: {
       enabled: s.reminder?.enabled ?? DEFAULT_SETTINGS.reminder.enabled,
       time: s.reminder?.time ?? DEFAULT_SETTINGS.reminder.time
@@ -64,7 +76,9 @@ export async function readSettings(root: string): Promise<AppSettings> {
       intervalMinutes: s.webdav?.intervalMinutes ?? DEFAULT_SETTINGS.webdav.intervalMinutes,
       lastSyncAt: s.webdav?.lastSyncAt ?? DEFAULT_SETTINGS.webdav.lastSyncAt
     },
-    updateSource: s.updateSource ?? DEFAULT_SETTINGS.updateSource
+    updateSource: s.updateSource ?? DEFAULT_SETTINGS.updateSource,
+    // 只认显式的 true：缺字段 / 旧版本 settings.json 一律视为未解锁
+    momproAccess: s.momproAccess === true
   }
 }
 

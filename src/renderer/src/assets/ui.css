@@ -1,0 +1,787 @@
+/* ============================================================================
+   ui.css —— 新外壳用的通用原子件（卡片 / 按钮 / 药丸 / 输入框 / 空态 …）
+   只放跨页面复用的东西；页面布局放 views.css。
+   变量全部来自 theme.css（--surface / --hairline / --text-1 …）。
+   ========================================================================== */
+
+/* ------------------------------ 页面骨架 ------------------------------ */
+.workhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  flex: 0 0 56px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.wh-left,
+.wh-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wh-right {
+  margin-left: auto;
+}
+
+.wh-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--text-1);
+}
+
+.wh-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.workscroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 24px;
+}
+
+/* ------------------------------ 卡片 ------------------------------ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--hairline-hi);
+}
+
+.card--pad {
+  padding: 14px;
+}
+
+.card--flush {
+  padding: 0;
+}
+
+.cardhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.cardtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.cardtitle svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+.cardsub {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 按钮 ------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s var(--ease-out, ease), border-color 0.14s, transform 0.12s;
+}
+
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--hairline-hi);
+}
+
+.btn:active {
+  transform: translateY(0.5px);
+}
+
+.btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn--primary {
+  color: var(--on-accent);
+  background: linear-gradient(160deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: 0 4px 14px -6px var(--accent-glow, var(--accent));
+}
+
+.btn--primary:hover {
+  filter: brightness(1.06);
+  background: linear-gradient(160deg, var(--accent), var(--accent-2));
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+
+.btn--ghost:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.btn--danger {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.btn--sm {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.btn--sm svg {
+  width: 13px;
+  height: 13px;
+}
+
+.btn--icon {
+  width: 30px;
+  padding: 0;
+}
+
+.btn--icon.btn--sm {
+  width: 26px;
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ------------------------------ 药丸 / 标签 ------------------------------ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pill > i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.pill--accent {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line, transparent);
+}
+
+.pill--ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 26%, transparent);
+}
+
+.pill--warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 26%, transparent);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--c, var(--text-2));
+  border: 1px solid color-mix(in srgb, var(--c, var(--text-3)) 42%, transparent);
+  background: color-mix(in srgb, var(--c, var(--text-3)) 14%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ------------------------------ 输入 ------------------------------ */
+.input,
+.textarea {
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  outline: none;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-3);
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.65;
+}
+
+/* ------------------------------ 杂项 ------------------------------ */
+.divider {
+  height: 1px;
+  margin: 10px 0;
+  background: var(--hairline-soft);
+  border: 0;
+}
+
+.muted {
+  color: var(--text-3);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 160px;
+  padding: 24px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: center;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-lg, 14px);
+}
+
+.empty-state svg {
+  width: 20px;
+  height: 20px;
+  opacity: 0.55;
+}
+
+/* 日期胶囊（页面标题栏里的那一天） */
+.datechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.datechip b {
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.datechip svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+/* 分段控件 */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.seg-btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.seg-btn:hover {
+  color: var(--text-1);
+}
+
+.seg-btn.on {
+  color: var(--text-1);
+  font-weight: 600;
+  background: var(--surface-3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.btn--soft {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line, transparent);
+}
+/* 日期选择器的触发器：在 .datechip 里退化成纯文本按钮 */
+.datechip .dp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.datechip .dp-btn .dp-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+.datechip .dp-btn:hover .dp-text {
+  color: var(--accent);
+}
+/* ---------------- 全局提示条（右下角浮出，2.6s 自动消失） ---------------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 700;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  font-size: 12.5px;
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow-3, 0 18px 40px rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(18px);
+  animation: toast-in 0.22s var(--ease, cubic-bezier(0.22, 0.61, 0.36, 1));
+  cursor: default;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---------------- 日历页 ---------------- */
+.cal-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.cal-view > .workscroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 24px;
+}
+
+.cal-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.cal-card {
+  padding: 14px 16px 16px;
+}
+
+.cal-card .cal-cell {
+  min-height: 40px;
+  font-size: 12.5px;
+}
+
+.cal-side {
+  padding: 14px 16px;
+  min-height: 220px;
+}
+
+.cal-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cal-side-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-side-head h3 svg {
+  color: var(--text-3);
+}
+
+.cal-tasklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-tasklist li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-soft, transparent);
+  border-radius: 9px;
+}
+
+.cal-tasklist li .t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.cal-tasklist li.done .t {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.cal-tasklist li .m {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.cbdot,
+.cbox-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.cal-tasklist li.done .cbox-dot {
+  background: var(--text-3);
+  box-shadow: none;
+}
+
+/* ---------------- 标题栏搜索：输入框与结果面板 ---------------- */
+:is(.titlebar, .nav-search) .search-wrap {
+  position: relative;
+  width: min(420px, 100%);
+}
+
+:is(.titlebar, .nav-search) .search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 10px 0 30px;
+  font-size: 12.5px;
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  outline: none;
+}
+
+:is(.titlebar, .nav-search) .search-input::placeholder {
+  color: var(--text-3);
+}
+
+:is(.titlebar, .nav-search) .search-input:focus {
+  border-color: var(--accent-line);
+  background: var(--surface);
+}
+
+:is(.titlebar, .nav-search) .search-wrap > svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+:is(.titlebar, .nav-search) .search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow-3, 0 20px 44px rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(20px);
+}
+
+:is(.titlebar, .nav-search) .search-hit {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+:is(.titlebar, .nav-search) .search-hit:hover {
+  background: var(--surface-2);
+}
+
+:is(.titlebar, .nav-search) .search-hit-date {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.titlebar, .nav-search) .search-hit-title {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+
+:is(.titlebar, .nav-search) .search-hit-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+:is(.titlebar, .nav-search) .search-empty {
+  padding: 14px 10px;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* 标题栏要压在 .shell 之上，否则下拉结果会被工作区盖住（两者同为 z-index:2 时后出现的赢） */
+.titlebar {
+  z-index: 40;
+}
+
+:is(.titlebar, .nav-search) .search-results {
+  background: color-mix(in srgb, var(--bg) 88%, #ffffff);
+  backdrop-filter: none;
+}
+/* 日历页页脚：「更新日历」要保留（它和「回到今天」共用 .today-btn 类） */
+.cal-view .cal-foot {
+  display: block;
+}
+
+.cal-view .cal-foot-btns > .today-btn:not(.cal-refresh-btn) {
+  display: none;
+}
+
+.cal-view .cal-refresh-btn {
+  display: inline-flex;
+  width: 100%;
+}
+/* 日报：切日期时保留旧内容 + 淡出，避免空态闪一下、详情栏宽度跳动 */
+.daygrid.is-loading {
+  opacity: .5;
+  transition: opacity .12s ease;
+}
+
+/* 右侧详情栏没有选中任务时的占位 */
+.side-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-3);
+}
+
+.side-empty p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.side-empty .muted {
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+/* 上下文栏任务项出现时轻微淡入，避免无任务→有任务硬切 */
+@keyframes ctxItemIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ctx-item {
+  animation: ctxItemIn .16s ease both;
+}
+/* 搜索框搬到页签行右侧后，容器样式 */
+.nav-search {
+  margin-left: auto;
+  padding-left: 10px;
+  width: min(300px, 30vw);
+  flex: 0 0 auto;
+}
+
+/* 「更多」菜单 */
+.nav-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.navmore-caret {
+  margin-left: 1px;
+  opacity: .55;
+}
+
+.navmenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  min-width: 176px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: color-mix(in srgb, var(--bg) 88%, #ffffff);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow-3);
+}
+
+.navmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navmenu-item:hover {
+  background: color-mix(in srgb, var(--text-1) 7%, transparent);
+  color: var(--text-1);
+}
+
+.navmenu-item.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 页签行：菜单不能被 overflow 裁掉 */
+.topnav {
+  overflow: visible;
+}
+
+@media (max-width: 1120px) {
+  .navtab > span {
+    display: none;
+  }
+
+  .navmore-caret {
+    display: none;
+  }
+
+  .nav-search {
+    width: min(240px, 34vw);
+  }
+}
+/* 模态遮罩从标题栏下面开始：标题栏（含窗口三键）保持可见可点，弹窗只在内容区之上 */
+.wl-overlay {
+  top: 40px;
+}
+
+.wl-overlay .wl-modal {
+  max-height: calc(100vh - 88px);
+}

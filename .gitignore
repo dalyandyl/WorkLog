@@ -5,8 +5,12 @@ logs/
 *.log
 *.tsbuildinfo
 .DS_Store
+
 # Gitee 更新令牌配置（含真实令牌，勿提交）
 src/main/updater-config.ts
 
-# �Ӿ�������ʱ����
+# 视觉工具临时产物
 .dsh-vision-router/
+
+# 本地截图 / 探针草稿区（截图、演示数据、临时脚本，仅本地）
+mockups/

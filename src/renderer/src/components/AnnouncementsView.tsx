@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { RELEASE_NOTES } from '../data/releaseNotes'
 import RichView from './RichView'
@@ -17,14 +17,16 @@ function compareVersions(a: string, b: string): number {
 }
 
 /**
- * 更新公告：展示每个版本发布的新内容（内置数据，随版本维护）。
- * 最新版本默认展开；当前运行版本高亮标注「当前版本」，比当前更新的版本标「新」。
+ * 更新公告：左侧一条时间线，右侧每条版本的内容。
+ * 最新版本默认展开；当前运行版本标「当前版本」，比当前新的标「新」。
  */
 export default function AnnouncementsView() {
   const [appVersion, setAppVersion] = useState('')
   const [openSet, setOpenSet] = useState<Set<string>>(() =>
     new Set(RELEASE_NOTES.length > 0 ? [RELEASE_NOTES[0].version] : [])
   )
+  const [active, setActive] = useState<string>(RELEASE_NOTES[0]?.version ?? '')
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     window.api.getAppInfo().then((info) => setAppVersion(info.appVersion))
@@ -37,54 +39,107 @@ export default function AnnouncementsView() {
       else next.add(version)
       return next
     })
+    setActive(version)
+  }
+
+  /** 侧边栏点击：展开并把对应条目滚到可视区顶部 */
+  function jump(version: string): void {
+    setActive(version)
+    setOpenSet((prev) => new Set(prev).add(version))
+    requestAnimationFrame(() => {
+      itemRefs.current[version]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function versionOf(note: { version: string }): { isCurrent: boolean; isNew: boolean } {
+    // 只有版本号同属一个大版本时才比较：开发模式/截图工具里 app.getVersion() 拿到的是
+    // Electron 自己的版本（如 44.0.0），不能拿它去和 1.5.x 比，否则每个版本都会被标成「新」。
+    const comparable = appVersion !== '' && appVersion.split('.')[0] === note.version.split('.')[0]
+    return {
+      isCurrent: comparable && note.version === appVersion,
+      isNew: comparable && compareVersions(note.version, appVersion) > 0
+    }
   }
 
   return (
     <div className="announce-view">
-      <div className="date-heading">
-        <h2>更新公告</h2>
-        <span className="weekday">每个版本发布的新内容</span>
-      </div>
+      <header className="workhead">
+        <div className="wh-left">
+          <span className="wh-title wh-title--hero">更新公告</span>
+        </div>
+      </header>
 
-      <div className="announce-list">
-        {RELEASE_NOTES.map((note) => {
-          const isCurrent = appVersion !== '' && note.version === appVersion
-          const isNew = appVersion !== '' && compareVersions(note.version, appVersion) > 0
-          const open = openSet.has(note.version)
-          return (
-            <div
-              key={note.version}
-              className={
-                'announce-card' +
-                (open ? ' open' : '') +
-                (isCurrent ? ' current' : '')
-              }
-            >
-              <button
-                type="button"
-                className="announce-head"
-                onClick={() => toggle(note.version)}
-                aria-expanded={open}
-              >
-                <span className="announce-title">
-                  <span className="announce-version">v{note.version}</span>
-                  {note.date && <span className="announce-date">{note.date}</span>}
-                  {isCurrent && <span className="announce-badge current">当前版本</span>}
-                  {isNew && <span className="announce-badge new">新</span>}
-                </span>
-                <ChevronDown size={16} className={'announce-chev' + (open ? ' open' : '')} />
-              </button>
-              {open && (
-                <div className="announce-body">
-                  <RichView content={note.content} />
-                </div>
-              )}
+      <div className="with-side">
+        <aside className="page-side">
+          <div className="ps-head">
+            <span>版本</span>
+            <span className="ps-count">{RELEASE_NOTES.length}</span>
+          </div>
+          <div className="ps-list">
+            {RELEASE_NOTES.map((note) => {
+              const { isCurrent, isNew } = versionOf(note)
+              return (
+                <button
+                  key={note.version}
+                  className={'ps-item' + (active === note.version ? ' on' : '')}
+                  onClick={() => jump(note.version)}
+                >
+                  <span className="ps-item-name">v{note.version}</span>
+                  {isCurrent && <span className="pill pill--accent">当前</span>}
+                  {isNew && <span className="pill pill--warn">新</span>}
+                  <span className="ps-item-meta">{note.date ?? ''}</span>
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+
+        <div className="page-main">
+          <div className="workscroll">
+            <div className="tl">
+              {RELEASE_NOTES.map((note) => {
+                const { isCurrent, isNew } = versionOf(note)
+                const open = openSet.has(note.version)
+                return (
+                  <div
+                    key={note.version}
+                    ref={(el) => {
+                      itemRefs.current[note.version] = el
+                    }}
+                    className={
+                      'tl-item' +
+                      (open ? ' open' : '') +
+                      (isCurrent ? ' current' : '') +
+                      (active === note.version ? ' active' : '')
+                    }
+                  >
+                    <span className="tl-dot" />
+                    <div className="tl-card">
+                      <button
+                        type="button"
+                        className="tl-head"
+                        onClick={() => toggle(note.version)}
+                        aria-expanded={open}
+                      >
+                        <span className="tl-ver">v{note.version}</span>
+                        {note.date && <span className="tl-date">{note.date}</span>}
+                        {isCurrent && <span className="pill pill--accent">当前版本</span>}
+                        {isNew && <span className="pill pill--warn">新</span>}
+                        <ChevronDown size={15} className={'tl-chev' + (open ? ' open' : '')} />
+                      </button>
+                      {open && (
+                        <div className="tl-body">
+                          <RichView content={note.content} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
+          </div>
+        </div>
       </div>
-
-      <div className="announce-hint">更新内容内置在应用中，随版本发布同步更新</div>
     </div>
   )
 }

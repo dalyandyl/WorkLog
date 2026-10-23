@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface DrawerProps {
@@ -21,7 +22,9 @@ export default function Drawer({ open, title, width = 560, onClose, children }: 
 
   if (!open) return null
 
-  return (
+  // 用 portal 挂到 body：否则固定在 .shell（z-index:2 的层叠上下文）里，
+  // 永远盖不过同级的 .topnav，抽屉会被导航条压住。
+  return createPortal(
     <div className="wl-overlay drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="wl-drawer" style={{ width }}>
         <div className="wl-drawer-head">
@@ -32,6 +35,7 @@ export default function Drawer({ open, title, width = 560, onClose, children }: 
         </div>
         <div className="wl-drawer-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

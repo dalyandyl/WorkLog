@@ -148,78 +148,125 @@ export default function WeeklyView({ weekKey, tags, onWeekChange, onStatus }: We
     if (wk) onWeekChange(wk)
   }
 
+  /** 侧栏：最近 6 周（按当前周往前推，用 weekInfoOf 同步算，不额外打 IPC） */
+  const weekBase = info ? new Date(info.start + 'T00:00:00') : new Date()
+  const weeks = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(weekBase)
+    d.setDate(weekBase.getDate() - 7 * i)
+    return weekInfoOf(toDateStr(d))
+  })
+
+  const allTasks = Object.values(tasksByDate).flat()
+  const taskStats = {
+    total: allTasks.length,
+    done: allTasks.filter((t) => t.done).length,
+    rate: allTasks.length ? Math.round((allTasks.filter((t) => t.done).length / allTasks.length) * 100) : 0
+  }
+
   function goThisWeek(): void {
     onWeekChange(weekInfoOf(toDateStr(new Date())).weekKey)
   }
 
   return (
     <div className="weekly-view">
-      <div className="weekly-head">
-        <button className="week-nav" onClick={() => shift(-1)} title="上一周">
-          ‹
-        </button>
-        <div className="weekly-title">
-          {info ? `第 ${info.week} 周（${info.start} ~ ${info.end}）` : weekKey}
-          <span className="week-key">{weekKey}</span>
-        </div>
-        <button className="week-nav" onClick={() => shift(1)} title="下一周">
-          ›
-        </button>
-        <DatePicker
-          value={info ? info.start : ''}
-          onChange={(v) => onWeekChange(weekInfoOf(v).weekKey)}
-          title="选择日期，跳到所在周"
-        />
-        <button className="week-today" onClick={goThisWeek}>
-          回到本周
-        </button>
-      </div>
-
-      <div className="weekly-days">
-        {info
-          ? info.dates.map((d) => (
-              <DayBlock
-                key={d}
-                date={d}
-                tasks={tasksByDate[d] ?? []}
-                tags={tags}
-                isRest={restSet.has(d)}
-                onOpenTask={setDetailTask}
-              />
-            ))
-          : null}
-      </div>
-
-      <div className="weekly-summary">
-        <div className="weekly-summary-head">
-          <h3>周总结</h3>
-          <button className="ghost-btn" onClick={() => setShowSummary(true)}>
-            <PenLine size={14} />
-            填写周报总结
+      <header className="workhead">
+        <div className="wh-left">
+          <button className="btn btn--icon btn--sm" onClick={() => shift(-1)} title="上一周">
+            ‹
+          </button>
+          <span className="wh-title">{info ? `第 ${info.week} 周` : weekKey}</span>
+          <span className="wh-sub">{info ? `${info.start} – ${info.end}` : ''}</span>
+          <button className="btn btn--icon btn--sm" onClick={() => shift(1)} title="下一周">
+            ›
           </button>
         </div>
-        {summaryLoaded ? (
-          summary.trim() ? (
-            <RichView content={summary} />
-          ) : (
-            <div className="task-empty">本周总结未填写，点击「填写周报总结」开始</div>
-          )
-        ) : (
-          <div className="loading">加载中…</div>
-        )}
-      </div>
-
-      <Modal open={showSummary} title="填写周报总结" width={760} onClose={() => setShowSummary(false)}>
-        <div className="weekly-summary-editor">
-          <MarkdownEditor
-            value={summary}
-            onChange={changeSummary}
-            attachFolder={weekKey}
-            onStatus={onStatus}
-            placeholder="在此填写本周工作总结（Markdown）…"
+        <div className="wh-right">
+          <DatePicker
+            value={info ? info.start : ''}
+            onChange={(v) => onWeekChange(weekInfoOf(v).weekKey)}
+            title="选择日期，跳到所在周"
           />
+          <button className="btn btn--sm" onClick={goThisWeek}>
+            回到本周
+          </button>
         </div>
-      </Modal>
+      </header>
+
+      <div className="with-side">
+        <aside className="page-side">
+          <div className="ps-head">
+            <span>周次</span>
+            <span className="ps-count">6</span>
+          </div>
+          <div className="ps-list">
+            {weeks.map((w) => (
+              <button
+                key={w.weekKey}
+                className={'ps-item' + (w.weekKey === weekKey ? ' on' : '')}
+                onClick={() => onWeekChange(w.weekKey)}
+              >
+                <span className="ps-item-name">第 {w.week} 周</span>
+                <span className="ps-item-meta">
+                  {w.start.slice(5)}–{w.end.slice(5)}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="ps-head">
+            <span>本周概览</span>
+          </div>
+          <div className="ps-kv">
+            <span>任务</span>
+            <b>{taskStats.total}</b>
+          </div>
+          <div className="ps-kv">
+            <span>已完成</span>
+            <b>{taskStats.done}</b>
+          </div>
+          <div className="ps-kv">
+            <span>完成率</span>
+            <b>{taskStats.rate}%</b>
+          </div>
+        </aside>
+
+        <div className="page-main">
+          <div className="workscroll">
+            <div className="weekly-days">
+              {info
+                ? info.dates.map((d) => (
+                    <DayBlock
+                      key={d}
+                      date={d}
+                      tasks={tasksByDate[d] ?? []}
+                      tags={tags}
+                      isRest={restSet.has(d)}
+                      onOpenTask={setDetailTask}
+                    />
+                  ))
+                : null}
+            </div>
+
+            <div className="weekly-summary">
+              <div className="weekly-summary-head">
+                <h3>周总结</h3>
+                <span className="muted">{summary.trim() ? '自动保存' : ''}</span>
+              </div>
+              {summaryLoaded ? (
+                <MarkdownEditor
+                  value={summary}
+                  onChange={changeSummary}
+                  attachFolder={weekKey}
+                  onStatus={onStatus}
+                  placeholder=""
+                />
+              ) : (
+                <div className="loading">加载中…</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <Drawer
         open={detailTask !== null}

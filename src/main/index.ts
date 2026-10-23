@@ -21,7 +21,7 @@ import {
   type NewTaskInput,
   type Task
 } from './tasks'
-import { createTag, deleteTag, listTags, recolorTag, renameTag } from './tags'
+import { createTag, deleteTag, listTags, recolorTag, renameTag, restoreTag } from './tags'
 import {
   addTrashItem,
   clearTrash,
@@ -49,13 +49,23 @@ import {
   importAttachmentFile,
   saveAttachmentBuffer
 } from './attachments'
-import type { Meeting, StickyNote } from '../shared/types'
+import type { Meeting, MomProFeatureInput, StickyNote } from '../shared/types'
+import {
+  createMomProFeature,
+  deleteMomProFeature,
+  listMomProFeatures,
+  listMomProPlugins,
+  updateMomProFeature
+} from './mompro'
+import { attachmentTypeLabel, originalAttachmentName } from '../shared/attachment'
 import { listMeetings, saveMeeting, deleteMeeting } from './meetings'
 import { meetingToMarkdown, meetingExportFileName } from './meetingExport'
 import {
   addStickyNote,
   deleteStickyNote,
   listStickyNotes,
+  restoreStickyNote,
+  takeStickyNote,
   updateStickyNote
 } from './stickyNotes'
 
@@ -96,6 +106,10 @@ function createWindow(): void {
     show: false,
     title: '日志工具',
     icon: appIconPath(),
+    // 无边框自绘标题栏：Win10 / Win11 表现一致，避免 Win11 才有的 Mica/Acrylic 差异。
+    // backgroundColor 与深色底一致，消除启动瞬间的白闪。
+    frame: false,
+    backgroundColor: '#090b12',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -106,6 +120,20 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // 最大化状态变化推给渲染层，自绘按钮才能切换「还原/最大化」图标
+  const pushMaxState = (): void => {
+    if (mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:maximized', mainWindow.isMaximized())
+  }
+  mainWindow.on('maximize', pushMaxState)
+  mainWindow.on('unmaximize', pushMaxState)
+
+  // 窗口尺寸锁定：只允许「默认大小」和「最大化」两种状态（界面按这两种尺寸适配）。
+  // 用 will-resize 拦截而不是 resizable:false —— 后者会把最大化也一起禁掉。
+  mainWindow.on('will-resize', (e) => {
+    e.preventDefault()
   })
 
   // 彻底移除窗口菜单栏：autoHideMenuBar 只是“隐藏”，按 Alt 仍会弹出默认的
@@ -276,7 +304,21 @@ app.whenReady().then(async () => {
   ipcMain.handle('tags:recolor', (_event, id: string, color: string) =>
     recolorTag(storageRoot, id, color)
   )
-  ipcMain.handle('tags:delete', (_event, id: string) => deleteTag(storageRoot, id))
+  // 标签删除：先把原对象记进回收站，再交给 deleteTag（它还会把标签从所有任务上摘掉）
+  ipcMain.handle('tags:delete', async (_event, id: string) => {
+    const all = await listTags(storageRoot)
+    const tag = all.find((t) => t.id === id)
+    if (tag) {
+      await addTrashItem(storageRoot, {
+        id: crypto.randomUUID(),
+        title: tag.name,
+        deletedAt: new Date().toISOString(),
+        kind: 'tag',
+        tag
+      })
+    }
+    return deleteTag(storageRoot, id)
+  })
 
   // ---- 回收站 ----
   ipcMain.handle('trash:list', () => listTrash(storageRoot))
@@ -288,9 +330,22 @@ app.whenReady().then(async () => {
   ipcMain.handle('trash:restore', async (_event, id: string) => {
     const item = await takeTrashItem(storageRoot, id)
     if (!item) return { ok: false }
+    const kind = item.kind ?? 'task'
+    if (kind === 'meeting' && item.meeting) {
+      await saveMeeting(storageRoot, item.meeting)
+      return { ok: true }
+    }
+    if (kind === 'note' && item.note) {
+      await restoreStickyNote(storageRoot, item.note)
+      return { ok: true }
+    }
+    if (kind === 'tag' && item.tag) {
+      await restoreTag(storageRoot, item.tag)
+      return { ok: true }
+    }
     await restoreTasksToDays(
       storageRoot,
-      item.tasks.map((t) => ({ date: t.date, task: t.task }))
+      (item.tasks ?? []).map((t) => ({ date: t.date, task: t.task }))
     )
     return { ok: true }
   })
@@ -348,6 +403,22 @@ app.whenReady().then(async () => {
   ipcMain.handle('rest:set', (_event, date: string, rest: boolean) =>
     setRest(storageRoot, date, rest)
   )
+
+  // ---- 自绘标题栏的窗口控制（frameless 窗口没有原生按钮） ----
+  const winOf = (event: Electron.IpcMainInvokeEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(event.sender)
+  ipcMain.handle('window:minimize', (event) => winOf(event)?.minimize())
+  ipcMain.handle('window:toggle-maximize', (event) => {
+    const win = winOf(event)
+    if (!win) return false
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
+  })
+  // 关闭走 win.close()：与点原生关闭按钮一致（1.5.3 是「关闭=最小化到托盘」）
+  ipcMain.handle('window:close', (event) => winOf(event)?.close())
+  ipcMain.handle('window:is-maximized', (event) => winOf(event)?.isMaximized() ?? false)
+
   ipcMain.handle('settings:get', () => readSettings(storageRoot))
   ipcMain.handle('settings:set', async (_event, s) => {
     await writeSettings(storageRoot, s)
@@ -393,10 +464,12 @@ app.whenReady().then(async () => {
   })
 
   // ---- 附件 ----
+  // ⚠️ 渲染层把 saveAttachmentImage / saveMeetingAttachment 声明为 Promise<string>，
+  // 这里必须只返回 url 字符串：曾因返回 { url, file } 对象，导致正文插入 "[object Object]"。
   ipcMain.handle(
     'attach:saveImage',
-    (_event, folder: string, name: string, buf: ArrayBuffer) =>
-      saveAttachmentBuffer(storageRoot, folder, name, buf)
+    async (_event, folder: string, name: string, buf: ArrayBuffer) =>
+      (await saveAttachmentBuffer(storageRoot, folder, name, buf)).url
   )
   ipcMain.handle('attach:pickFile', async (_event, folder: string) => {
     try {
@@ -418,11 +491,46 @@ app.whenReady().then(async () => {
       return { ok: false, error: String(err) }
     }
   })
+  // 预览：按扩展名交给系统关联的程序打开（即"动态判断文件类型用支持的软件打开"）
   ipcMain.handle('attach:open', async (_event, url: string) => {
     const filePath = attachmentUrlToPath(storageRoot, url)
     if (!filePath) return { ok: false, error: '附件路径无效' }
     const err = await shell.openPath(filePath)
-    return err ? { ok: false, error: err } : { ok: true }
+    if (!err) return { ok: true }
+    const label = attachmentTypeLabel(filePath)
+    return { ok: false, error: `系统没有找到可以打开该${label}的程序${err ? `（${err}）` : ''}` }
+  })
+  // 下载：另存为（默认用附件原始文件名，不带入库时间戳前缀）
+  ipcMain.handle('attach:download', async (_event, url: string) => {
+    const filePath = attachmentUrlToPath(storageRoot, url)
+    if (!filePath) return { ok: false, error: '附件路径无效' }
+    try {
+      const options: Electron.SaveDialogOptions = {
+        title: '下载附件',
+        defaultPath: originalAttachmentName(path.basename(filePath)),
+        buttonLabel: '保存'
+      }
+      const win = BrowserWindow.getFocusedWindow()
+      const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true }
+      await fs.copyFile(filePath, res.filePath)
+      return { ok: true, path: res.filePath }
+    } catch (err) {
+      console.error('attach:download failed:', err)
+      return { ok: false, error: String(err) }
+    }
+  })
+  // 定位：在资源管理器中选中该附件
+  ipcMain.handle('attach:reveal', async (_event, url: string) => {
+    const filePath = attachmentUrlToPath(storageRoot, url)
+    if (!filePath) return { ok: false, error: '附件路径无效' }
+    try {
+      await fs.access(filePath)
+    } catch {
+      return { ok: false, error: '附件文件不存在（可能已被删除）' }
+    }
+    shell.showItemInFolder(filePath)
+    return { ok: true }
   })
   ipcMain.handle('attach:delete', async (_event, url: string) => {
     const ok = await deleteAttachmentFile(storageRoot, url)
@@ -438,7 +546,21 @@ app.whenReady().then(async () => {
       return { ok: true }
     }
   )
-  ipcMain.handle('meetings:delete', (_event, id: string) => deleteMeeting(storageRoot, id))
+  // 会议删除改为先进回收站
+  ipcMain.handle('meetings:delete', async (_event, id: string) => {
+    const all = await listMeetings(storageRoot)
+    const meeting = all.find((m) => m.id === id)
+    if (meeting) {
+      await addTrashItem(storageRoot, {
+        id: crypto.randomUUID(),
+        title: meeting.title || '未命名会议',
+        deletedAt: new Date().toISOString(),
+        kind: 'meeting',
+        meeting
+      })
+    }
+    return deleteMeeting(storageRoot, id)
+  })
 
   // ---- 便签 ----
   ipcMain.handle('sticky:list', () => listStickyNotes(storageRoot))
@@ -448,7 +570,45 @@ app.whenReady().then(async () => {
     (_event, id: string, patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>) =>
       updateStickyNote(storageRoot, id, patch)
   )
-  ipcMain.handle('sticky:delete', (_event, id: string) => deleteStickyNote(storageRoot, id))
+  // 便签删除改为先进回收站
+  ipcMain.handle('sticky:delete', async (_event, id: string) => {
+    const note = await takeStickyNote(storageRoot, id)
+    if (note) {
+      await addTrashItem(storageRoot, {
+        id: crypto.randomUUID(),
+        title: note.text.slice(0, 40) || '（空便签）',
+        deletedAt: new Date().toISOString(),
+        kind: 'note',
+        note
+      })
+      return { ok: true }
+    }
+    return deleteStickyNote(storageRoot, id)
+  })
+
+  // ---- 功能台账（MomPro 表单/事务）----
+  // 个人专用模块：未解锁时一律拒绝（渲染层已经把导航项藏起来，这里是第二道闸，
+  // 防止别人改了渲染层状态直接调 IPC 把数据读走）。解锁状态存在 settings.json。
+  const momproUnlocked = async (): Promise<boolean> => {
+    const s = await readSettings(storageRoot)
+    return s.momproAccess === true
+  }
+  ipcMain.handle('mompro:list', async () => ((await momproUnlocked()) ? listMomProFeatures(storageRoot) : []))
+  ipcMain.handle('mompro:plugins', async () =>
+    (await momproUnlocked()) ? listMomProPlugins(storageRoot) : []
+  )
+  ipcMain.handle('mompro:create', async (_event, input: MomProFeatureInput) => {
+    if (!(await momproUnlocked())) throw new Error('功能台账未解锁')
+    return createMomProFeature(storageRoot, input)
+  })
+  ipcMain.handle('mompro:update', async (_event, id: string, input: MomProFeatureInput) => {
+    if (!(await momproUnlocked())) throw new Error('功能台账未解锁')
+    return updateMomProFeature(storageRoot, id, input)
+  })
+  ipcMain.handle('mompro:delete', async (_event, id: string) => {
+    if (!(await momproUnlocked())) throw new Error('功能台账未解锁')
+    return deleteMomProFeature(storageRoot, id)
+  })
 
   // 单篇导出 Markdown（元信息头 + 正文转换 + 附件清单）
   ipcMain.handle('meetings:export', async (_event, meeting: Meeting) => {

@@ -1,0 +1,259 @@
+/* ============================================================
+   主题令牌（1.5.5 玻璃主题）
+   ------------------------------------------------------------
+   5 套主题：aurora 极光玻璃（默认）/ graphite 石墨工位 / amber 黑曜琥珀 / deep 深海青 / light 浅色（原版）
+   本文件在 main.css 之后加载：先把旧变量（--bg/--panel/--border/--text/--muted）
+   重新映射到新配色，旧组件即可直接变深色；新组件用新变量。
+   ============================================================ */
+
+:root {
+  /* 布局尺寸 */
+  --titlebar-h: 40px;
+  --rail-w: 64px;
+  --ctx-w: 300px;
+  --detail-w: 348px;
+
+  /* 语义色 */
+  --t-amber: #f59e0b;
+  --t-teal: #14b8a6;
+  --t-rose: #f43f5e;
+  --t-violet: #8b5cf6;
+  --t-blue: #3b82f6;
+  --t-green: #10b981;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger-2: #f87171;
+
+  /* 由强调色派生（--accent 仍由 main.css 的 data-accent 规则给出） */
+  --accent-2: color-mix(in oklab, var(--accent) 74%, #fff);
+  --on-accent: #fff;
+  --accent-line: color-mix(in srgb, var(--accent) 36%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  --dur: 0.16s;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ---------- A 极光玻璃（默认） ---------- */
+:root[data-theme='aurora'] {
+  --bg: #080a10;
+  --bg-2: #0d1017;
+  --panel: color-mix(in srgb, #fff 6%, #080a10);
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+  --shell-fill: color-mix(in srgb, #090b12 62%, transparent);
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-2: rgba(255, 255, 255, 0.085);
+  --surface-3: rgba(255, 255, 255, 0.13);
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-soft: rgba(255, 255, 255, 0.055);
+  --hairline-hi: rgba(255, 255, 255, 0.16);
+  --text-1: #eef1f7;
+  --text-2: #a9b1c3;
+  --text-3: #737c8e;
+  --blob1: rgba(37, 99, 235, 0.46);
+  --blob2: rgba(124, 58, 237, 0.38);
+  --blob3: rgba(6, 182, 212, 0.24);
+  --blob4: rgba(59, 130, 246, 0.2);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+  --shadow-2: 0 18px 50px -24px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 40px 100px -34px rgba(0, 0, 0, 0.95);
+  --grain-opacity: 0.1;
+}
+
+/* ---------- B 石墨工位 ---------- */
+:root[data-theme='graphite'] {
+  --bg: #131519;
+  --bg-2: #171a1f;
+  --panel: color-mix(in srgb, #fff 6%, #131519);
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+  --shell-fill: color-mix(in srgb, #14161b 66%, transparent);
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.075);
+  --surface-3: rgba(255, 255, 255, 0.12);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-soft: rgba(255, 255, 255, 0.05);
+  --hairline-hi: rgba(255, 255, 255, 0.14);
+  --text-1: #e9ebef;
+  --text-2: #a4a9b4;
+  --text-3: #737883;
+  --blob1: rgba(148, 163, 184, 0.16);
+  --blob2: rgba(203, 213, 225, 0.1);
+  --blob3: rgba(148, 163, 184, 0.08);
+  --blob4: rgba(226, 232, 240, 0.06);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.42), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+  --shadow-2: 0 18px 50px -24px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 40px 100px -34px rgba(0, 0, 0, 0.95);
+  --grain-opacity: 0.09;
+}
+
+/* ---------- C 黑曜琥珀 ---------- */
+:root[data-theme='amber'] {
+  --bg: #130f0b;
+  --bg-2: #19130e;
+  --panel: color-mix(in srgb, #fff 6%, #130f0b);
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+  --shell-fill: color-mix(in srgb, #150f0a 62%, transparent);
+  --surface: rgba(255, 236, 214, 0.055);
+  --surface-2: rgba(255, 236, 214, 0.085);
+  --surface-3: rgba(255, 236, 214, 0.13);
+  --hairline: rgba(255, 226, 196, 0.1);
+  --hairline-soft: rgba(255, 226, 196, 0.055);
+  --hairline-hi: rgba(255, 226, 196, 0.17);
+  --text-1: #f4ece2;
+  --text-2: #b8a894;
+  --text-3: #83776a;
+  --blob1: rgba(180, 83, 9, 0.4);
+  --blob2: rgba(217, 119, 6, 0.24);
+  --blob3: rgba(120, 53, 15, 0.34);
+  --blob4: rgba(251, 191, 36, 0.12);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 30px -18px rgba(0, 0, 0, 0.85);
+  --shadow-2: 0 18px 50px -24px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 40px 100px -34px rgba(0, 0, 0, 0.95);
+  --grain-opacity: 0.1;
+}
+
+/* ---------- D 深海青 ---------- */
+:root[data-theme='deep'] {
+  --bg: #050e16;
+  --bg-2: #08151f;
+  --panel: color-mix(in srgb, #fff 6%, #050e16);
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+  --shell-fill: color-mix(in srgb, #061019 58%, transparent);
+  --surface: rgba(190, 235, 255, 0.055);
+  --surface-2: rgba(190, 235, 255, 0.085);
+  --surface-3: rgba(190, 235, 255, 0.13);
+  --hairline: rgba(186, 230, 253, 0.1);
+  --hairline-soft: rgba(186, 230, 253, 0.055);
+  --hairline-hi: rgba(186, 230, 253, 0.17);
+  --text-1: #e4f1f8;
+  --text-2: #9db3c2;
+  --text-3: #6b8291;
+  --blob1: rgba(8, 145, 178, 0.4);
+  --blob2: rgba(14, 116, 144, 0.34);
+  --blob3: rgba(6, 95, 70, 0.26);
+  --blob4: rgba(56, 189, 248, 0.16);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 30px -18px rgba(0, 0, 0, 0.85);
+  --shadow-2: 0 18px 50px -24px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 40px 100px -34px rgba(0, 0, 0, 0.95);
+  --grain-opacity: 0.1;
+}
+
+/* ---------- L 浅色（原版） ---------- */
+:root[data-theme='light'] {
+  --bg: #f6f7f9;
+  --bg-2: #ffffff;
+  --panel: #ffffff;
+  --shell-fill: color-mix(in srgb, #ffffff 88%, transparent);
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e6e9ef;
+  --hairline: #e4e7eb;
+  --hairline-soft: #eef0f4;
+  --hairline-hi: #d6dae1;
+  --text-1: #1f2328;
+  --text-2: #4b5563;
+  --text-3: #6b7280;
+  --blob1: rgba(59, 130, 246, 0.1);
+  --blob2: rgba(139, 92, 246, 0.08);
+  --blob3: rgba(20, 184, 166, 0.06);
+  --blob4: rgba(59, 130, 246, 0.05);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 6px 20px rgba(16, 24, 40, 0.1);
+  --shadow-3: 0 18px 50px rgba(16, 24, 40, 0.16);
+  --grain-opacity: 0.06;
+}
+
+/* ---------- 旧变量映射（让 1.5.3 的组件直接适配新主题） ---------- */
+:root {
+  --border: var(--hairline);
+  --text: var(--text-1);
+  --muted: var(--text-2);
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  --shadow-card: var(--shadow-1);
+}
+
+/* ============================================================
+   背景：光斑 + 噪点（双系统一致，不用系统原生 Mica/Acrylic）
+   ============================================================ */
+.aurora-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--bg);
+  pointer-events: none;
+}
+
+.aurora-layer::before {
+  content: '';
+  position: absolute;
+  inset: -6%;
+  background:
+    radial-gradient(56% 60% at 18% 6%, var(--blob1), transparent 62%),
+    radial-gradient(52% 54% at 86% 12%, var(--blob2), transparent 64%),
+    radial-gradient(60% 58% at 66% 100%, var(--blob3), transparent 66%),
+    radial-gradient(46% 46% at 4% 92%, var(--blob4), transparent 70%);
+  animation: wl-drift 30s var(--ease) infinite alternate;
+}
+
+@keyframes wl-drift {
+  to {
+    transform: translate3d(2.2%, 1.6%, 0) scale(1.07);
+  }
+}
+
+.grain-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E");
+}
+
+:root[data-theme='light'] .grain-layer {
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-layer::before {
+    animation: none;
+  }
+}
+
+/* 玻璃强度三档：只动透明度与模糊，不改配色 */
+:root[data-glass='off'] .aurora-layer::before {
+  opacity: 0.55;
+}
+
+:root[data-glass='strong'] .aurora-layer::before {
+  opacity: 1;
+}
+
+/* 滚动条（深色下默认滚动条很扎眼） */
+:root:not([data-theme='light']) ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:root:not([data-theme='light']) ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+:root:not([data-theme='light']) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: content-box;
+}
+
+:root:not([data-theme='light']) ::-webkit-scrollbar-track {
+  background: transparent;
+}

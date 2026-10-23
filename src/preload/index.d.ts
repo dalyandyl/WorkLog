@@ -2,6 +2,8 @@ import type {
   AppSettings,
   ExportOptions,
   Meeting,
+  MomProFeature,
+  MomProFeatureInput,
   MonthStats,
   NewTaskInput,
   PublishRecord,
@@ -18,6 +20,13 @@ import type {
 
 export interface WorkLogApi {
   getStorageRoot(): Promise<string>
+
+  // 窗口控制（无边框自绘标题栏）
+  winMinimize(): Promise<void>
+  winToggleMaximize(): Promise<boolean>
+  winClose(): Promise<void>
+  isWindowMaximized(): Promise<boolean>
+  onWindowMaximized(cb: (maximized: boolean) => void): () => void
 
   // 任务
   readTasks(date: string): Promise<Task[]>
@@ -100,6 +109,10 @@ export interface WorkLogApi {
     error?: string
   }>
   openAttachment(url: string): Promise<{ ok: boolean; error?: string }>
+  downloadAttachment(
+    url: string
+  ): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
+  revealAttachment(url: string): Promise<{ ok: boolean; error?: string }>
   deleteAttachment(url: string): Promise<{ ok: boolean; error?: string }>
 
   // 会议纪要
@@ -119,6 +132,13 @@ export interface WorkLogApi {
     patch: Partial<Pick<StickyNote, 'text' | 'pinned' | 'completed'>>
   ): Promise<StickyNote | null>
   deleteStickyNote(id: string): Promise<{ ok: boolean }>
+
+  // 功能台账（MomPro 表单/事务）
+  listMomProFeatures(): Promise<MomProFeature[]>
+  listMomProPlugins(): Promise<string[]>
+  createMomProFeature(input: MomProFeatureInput): Promise<MomProFeature>
+  updateMomProFeature(id: string, input: MomProFeatureInput): Promise<MomProFeature | null>
+  deleteMomProFeature(id: string): Promise<{ ok: boolean }>
 
   // 系统信息 / 更新
   getAppInfo(): Promise<{

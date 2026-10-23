@@ -1,7 +1,9 @@
+import { confirmDialog } from './confirm'
 import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   Download,
+  FileText,
   FolderOpen,
   Image as ImageIcon,
   Paperclip,
@@ -15,6 +17,7 @@ import Drawer from './Drawer'
 import MeetingEditor from './MeetingEditor'
 import DatePicker from './DatePicker'
 import DropdownSelect from './DropdownSelect'
+import { handleAttachmentClick } from '../utils/attachmentActions'
 
 interface MeetingListProps {
   tags: Tag[]
@@ -51,44 +54,67 @@ function MeetingDetail({
   onDelete: () => void
 }) {
   function onClickCapture(e: React.MouseEvent): void {
-    const target = e.target as HTMLElement
-    const a = target.closest?.('a') as HTMLAnchorElement | null
-    if (a && (a.getAttribute('href') ?? '').startsWith('wlattach://')) {
+    if (handleAttachmentClick(e)) {
       e.preventDefault()
       e.stopPropagation()
-      void window.api.openAttachment(a.getAttribute('href') ?? '')
     }
   }
 
   return (
-    <div className="meeting-detail">
-      <div className="meeting-detail-meta">
-        <h3 className="meeting-detail-title">{meeting.title || '未命名会议'}</h3>
-        <span className="meeting-detail-date">
-          <CalendarDays size={13} />
-          {meeting.date}
-        </span>
-        <div className="meeting-card-tags">
-          {meeting.tags.map((id) => {
-            const t = tagMap.get(id)
-            return t ? (
-              <span key={id} className="task-item-tag" style={{ borderColor: t.color, color: t.color }}>
-                {t.name}
-              </span>
-            ) : null
-          })}
-          {meeting.tags.length === 0 && <span className="muted">（无标签）</span>}
+    <div className="md-view">
+      <div className="md-meta">
+        <h2 className="md-title">{meeting.title || '未命名会议'}</h2>
+        <div className="md-sub">
+          <span className="md-date">
+            <CalendarDays size={13} />
+            {meeting.date}
+          </span>
+          <span className="md-wd">
+            {WEEKDAY_NAMES[new Date(meeting.date + 'T00:00:00').getDay()]}
+          </span>
+          <span className="md-tags">
+            {meeting.tags.map((id) => {
+              const t = tagMap.get(id)
+              return t ? (
+                <span key={id} className="tag" style={{ '--c': t.color } as React.CSSProperties}>
+                  {t.name}
+                </span>
+              ) : null
+            })}
+            {meeting.tags.length === 0 && <span className="muted">无标签</span>}
+          </span>
         </div>
       </div>
 
+      <div className="md-section">
+        <div className="md-sec-head">
+          <FileText size={14} />
+          会议纪要
+          <span className="md-sec-hint">{stripHtml(meeting.body).length} 字</span>
+        </div>
+        <div
+          className="rich-content rich-view md-body"
+          onClickCapture={onClickCapture}
+          dangerouslySetInnerHTML={{ __html: meeting.body || '<p class="md-empty">还没有正文，点「编辑」补充。</p>' }}
+        />
+      </div>
+
       {meeting.attachments.length > 0 && (
-        <div className="meeting-detail-attachments">
-          <div className="attach-label">附件（{meeting.attachments.length}）</div>
-          <div className="meeting-attach-list">
+        <div className="md-section">
+          <div className="md-sec-head">
+            <Paperclip size={14} />
+            附件
+            <span className="md-sec-hint">{meeting.attachments.length}</span>
+          </div>
+          <div className="md-attach-list">
             {meeting.attachments.map((a) => (
-              <div key={a.id} className="meeting-attach-item">
-                <span className="attach-icon">{a.type === 'image' ? <ImageIcon size={14} /> : <Paperclip size={14} />}</span>
-                <span className="attach-name" title={a.name}>{a.name}</span>
+              <div key={a.id} className="md-attach">
+                <span className="md-attach-icon">
+                  {a.type === 'image' ? <ImageIcon size={14} /> : <Paperclip size={14} />}
+                </span>
+                <span className="md-attach-name" title={a.name}>
+                  {a.name}
+                </span>
                 <button
                   className="icon-btn"
                   title="打开附件"
@@ -102,16 +128,18 @@ function MeetingDetail({
         </div>
       )}
 
-      <div
-        className="rich-content rich-view meeting-detail-body"
-        onClickCapture={onClickCapture}
-        dangerouslySetInnerHTML={{ __html: meeting.body || '<p></p>' }}
-      />
-
-      <div className="meeting-detail-actions">
-        <button className="action-btn save-btn" onClick={onEdit}><Pencil size={14} /> 编辑</button>
-        <button className="ghost-btn" onClick={onExport}><Download size={14} /> 导出</button>
-        <button className="icon-btn danger" onClick={onDelete} title="删除会议"><Trash2 size={15} /></button>
+      <div className="md-actions">
+        <button className="btn btn--primary" onClick={onEdit}>
+          <Pencil size={14} />
+          编辑
+        </button>
+        <button className="btn" onClick={onExport}>
+          <Download size={14} />
+          导出
+        </button>
+        <button className="btn btn--icon btn--danger" onClick={onDelete} title="删除会议">
+          <Trash2 size={15} />
+        </button>
       </div>
     </div>
   )
@@ -150,8 +178,8 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
     setEditorOpen(true)
   }
 
-  function deleteMeeting(m: Meeting): void {
-    if (!window.confirm(`确定删除会议「${m.title || '未命名会议'}」？此操作不可恢复。`)) return
+  async function deleteMeeting(m: Meeting): Promise<void> {
+    if (!await confirmDialog(`确定删除会议「${m.title || '未命名会议'}」？此操作不可恢复。`)) return
     window.api.deleteMeeting(m.id).then((r: { ok: boolean }) => {
       if (r.ok) {
         setDetail(null)
@@ -215,13 +243,15 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
         {m.tags.map((id) => {
           const t = tagMap.get(id)
           return t ? (
-            <span key={id} className="task-item-tag" style={{ borderColor: t.color, color: t.color }}>
+            <span key={id} className="tag" style={{ '--c': t.color } as React.CSSProperties}>
               {t.name}
             </span>
           ) : null
         })}
         {m.attachments.length > 0 && (
-          <span className="meeting-attach-count"><Paperclip size={12} /> {m.attachments.length}</span>
+          <span className="mt-attach-n">
+            <Paperclip size={12} /> {m.attachments.length}
+          </span>
         )}
       </>
     )
@@ -230,21 +260,36 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   function renderCard(m: Meeting): React.ReactNode {
     const summary = stripHtml(m.body)
     return (
-      <div key={m.id} className="meeting-card" onClick={() => setDetail(m)}>
-        <div className="meeting-card-info">
-          <h4 className="meeting-title">{m.title || '未命名会议'}</h4>
-          <span className="meeting-date-time">
+      <div key={m.id} className="mt-card" onClick={() => setDetail(m)}>
+        <div className="mt-card-top">
+          <h4 className="mt-card-title">{m.title || '未命名会议'}</h4>
+          <div className="mt-card-actions" onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn--icon btn--sm" onClick={() => exportMeeting(m)} title="导出 Markdown">
+              <Download size={14} />
+            </button>
+            <button className="btn btn--icon btn--sm" onClick={() => openEdit(m)} title="编辑会议">
+              <Pencil size={14} />
+            </button>
+            <button className="btn btn--icon btn--sm btn--danger" onClick={() => deleteMeeting(m)} title="删除会议">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+        <div className="mt-card-meta">
+          <span className="mt-card-date">
             <CalendarDays size={12} />
             {m.date}
           </span>
-          {summary && <p className="meeting-card-summary">{truncate(summary, 140)}</p>}
-          <div className="meeting-card-tags">{renderTags(m)}</div>
+          <span className="mt-card-wd">
+            {WEEKDAY_NAMES[new Date(m.date + 'T00:00:00').getDay()]}
+          </span>
         </div>
-        <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
-        </div>
+        {summary ? (
+          <p className="mt-card-summary">{truncate(summary, 160)}</p>
+        ) : (
+          <p className="mt-card-summary mt-card-summary--empty">还没有正文</p>
+        )}
+        <div className="mt-card-foot">{renderTags(m)}</div>
       </div>
     )
   }
@@ -252,83 +297,149 @@ export default function MeetingList({ tags, onStatus }: MeetingListProps) {
   function renderTimelineItem(m: Meeting): React.ReactNode {
     const summary = stripHtml(m.body)
     return (
-      <div key={m.id} className="timeline-item" onClick={() => setDetail(m)}>
-        <div className="timeline-content">
-          <h4>{m.title || '未命名会议'}</h4>
-          {summary && <p className="meeting-card-summary">{truncate(summary, 140)}</p>}
-          <div className="meeting-card-tags">{renderTags(m)}</div>
-        </div>
-        <div className="meeting-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" onClick={() => exportMeeting(m)} title="导出 Markdown"><Download size={15} /></button>
-          <button className="icon-btn" onClick={() => openEdit(m)} title="编辑会议"><Pencil size={15} /></button>
-          <button className="icon-btn danger" onClick={() => deleteMeeting(m)} title="删除会议"><Trash2 size={15} /></button>
+      <div key={m.id} className="mt-tl-item" onClick={() => setDetail(m)}>
+        <span className="mt-tl-dot" />
+        <div className="mt-tl-card">
+          <div className="mt-tl-top">
+            <h4>{m.title || '未命名会议'}</h4>
+            <div className="mt-card-actions" onClick={(e) => e.stopPropagation()}>
+              <button className="btn btn--icon btn--sm" onClick={() => exportMeeting(m)} title="导出 Markdown">
+                <Download size={14} />
+              </button>
+              <button className="btn btn--icon btn--sm" onClick={() => openEdit(m)} title="编辑会议">
+                <Pencil size={14} />
+              </button>
+              <button className="btn btn--icon btn--sm btn--danger" onClick={() => deleteMeeting(m)} title="删除会议">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+          {summary && <p className="mt-card-summary">{truncate(summary, 160)}</p>}
+          <div className="mt-card-foot">{renderTags(m)}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="meeting-list">
-      {/* 顶部操作栏：搜索 / 筛选 / 排序 / 视图切换 / 新建 */}
-      <div className="meeting-list-header">
-        <input
-          className="search-input meeting-search"
-          placeholder="搜索标题、正文、附件名..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <DropdownSelect
-          value={selectedTagId ?? ''}
-          options={[{ value: '', label: '全部标签' }, ...tags.map((t) => ({ value: t.id, label: t.name }))]}
-          onChange={(v) => setSelectedTagId(v || null)}
-          title="按标签筛选"
-        />
-        <DatePicker value={dateFrom} onChange={setDateFrom} title="开始日期" />
-        <span className="date-range-sep">~</span>
-        <DatePicker value={dateTo} onChange={setDateTo} title="结束日期" />
-        <DropdownSelect
-          value={sortBy}
-          options={[
-            { value: 'time', label: '按会议日期' },
-            { value: 'created', label: '按创建时间' }
-          ]}
-          onChange={(v) => setSortBy(v as SortMode)}
-          title="排序方式"
-        />
-        <div className="meeting-view-toggle">
-          <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')} title="卡片视图">
-            ▦ 卡片
-          </button>
-          <button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')} title="时间轴视图">
-            ≡ 时间轴
+    <div className="meeting-view">
+      <header className="workhead">
+        <div className="wh-left">
+          <span className="wh-title">会议纪要</span>
+          <span className="wh-sub">
+            共 {meetings.length} 场
+            {filtered.length !== meetings.length ? ` · 筛选出 ${filtered.length} 场` : ''}
+          </span>
+        </div>
+        <div className="wh-right">
+          <div className="seg">
+            <button
+              className={'seg-btn' + (view === 'card' ? ' on' : '')}
+              onClick={() => setView('card')}
+              title="卡片视图"
+            >
+              卡片
+            </button>
+            <button
+              className={'seg-btn' + (view === 'timeline' ? ' on' : '')}
+              onClick={() => setView('timeline')}
+              title="时间轴视图"
+            >
+              时间轴
+            </button>
+          </div>
+          <button className="btn btn--primary btn--sm" onClick={openNew}>
+            <Plus size={14} />
+            新建会议
           </button>
         </div>
-        <button className="new-meeting-btn" onClick={openNew}>
-          <Plus size={14} />
-          新建会议
-        </button>
-      </div>
+      </header>
 
-      {/* 会议列表（卡片 / 时间轴） */}
-      {filtered.length === 0 ? (
-        <div className="task-empty">
-          {meetings.length === 0 ? '暂无会议纪要' : '没有符合条件的会议'}
-        </div>
-      ) : view === 'card' ? (
-        <div className="meeting-cards">{filtered.map((m) => renderCard(m))}</div>
-      ) : (
-        <div className="meeting-timeline">
-          {byDate.map(([d, list]) => (
-            <div key={d} className="timeline-group">
-              <div className="timeline-date-header">
-                <CalendarDays size={12} />
-                {dateHeader(d)}
-              </div>
-              {list.map((m) => renderTimelineItem(m))}
+      <div className="with-side">
+        <aside className="page-side">
+          <input
+            className="input"
+            placeholder="搜索标题、正文、附件名…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="ps-head">
+            <span>筛选</span>
+          </div>
+          <div className="ps-list ps-list--form">
+            <DropdownSelect
+              value={selectedTagId ?? ''}
+              options={[{ value: '', label: '全部标签' }, ...tags.map((t) => ({ value: t.id, label: t.name }))]}
+              onChange={(v) => setSelectedTagId(v || null)}
+              title="按标签筛选"
+            />
+            <DropdownSelect
+              value={sortBy}
+              options={[
+                { value: 'time', label: '按会议日期' },
+                { value: 'created', label: '按创建时间' }
+              ]}
+              onChange={(v) => setSortBy(v as SortMode)}
+              title="排序方式"
+            />
+            <div className="mt-range">
+              <DatePicker value={dateFrom} onChange={setDateFrom} title="开始日期" />
+              <span className="mt-range-sep">~</span>
+              <DatePicker value={dateTo} onChange={setDateTo} title="结束日期" />
             </div>
-          ))}
+          </div>
+
+          <div className="ps-head">
+            <span>最近会议</span>
+            <span className="ps-count">{filtered.length}</span>
+          </div>
+          <div className="ps-list">
+            {filtered.slice(0, 12).map((m) => (
+              <button key={m.id} className="ps-item" onClick={() => setDetail(m)}>
+                <span className="ps-item-name">{m.title || '未命名会议'}</span>
+                <span className="ps-item-meta">{m.date.slice(5)}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="muted" style={{ fontSize: 11.5, padding: '6px 2px' }}>
+                没有符合条件的会议
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="page-main">
+          <div className="workscroll">
+            {filtered.length === 0 ? (
+              <div className="empty-state">
+                <CalendarDays size={26} />
+                <div>{meetings.length === 0 ? '还没有会议纪要' : '没有符合条件的会议'}</div>
+                {meetings.length === 0 && (
+                  <button className="btn btn--sm" onClick={openNew}>
+                    <Plus size={14} />
+                    新建第一场
+                  </button>
+                )}
+              </div>
+            ) : view === 'card' ? (
+              <div className="mt-grid">{filtered.map((m) => renderCard(m))}</div>
+            ) : (
+              <div className="mt-tl">
+                {byDate.map(([d, list]) => (
+                  <div key={d} className="mt-tl-group">
+                    <div className="mt-tl-date">
+                      <CalendarDays size={12} />
+                      {dateHeader(d)}
+                      <span className="mt-tl-count">{list.length}</span>
+                    </div>
+                    {list.map((m) => renderTimelineItem(m))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* 只读详情抽屉（单击会议打开） */}
       <Drawer open={detail !== null} title="会议详情" width={620} onClose={() => setDetail(null)}>

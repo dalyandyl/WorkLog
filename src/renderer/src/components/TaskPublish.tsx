@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import {
   CalendarClock,
   CalendarDays,
@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import type { PublishRecord, Subtask, Tag, Task } from '../types'
 import { enumerateDates, toDateStr, weekInfoOf, type PublishGranularity } from '../utils/date'
-import MarkdownEditor from './MarkdownEditor'
 import RichView from './RichView'
 import TagPicker from './TagPicker'
 import Modal from './Modal'
@@ -20,6 +19,10 @@ import DatePicker from './DatePicker'
 import SubtaskEditor from './SubtaskEditor'
 import DropdownSelect from './DropdownSelect'
 import PostponeModal from './PostponeModal'
+import PublishPage from './PublishPage'
+
+// 正文富文本编辑器较重（TipTap + lowlight），懒加载；自带 Suspense 边界，避免整页被替换
+const RichBodyEditor = lazy(() => import('./RichBodyEditor'))
 
 interface TaskPublishProps {
   tags: Tag[]
@@ -174,12 +177,14 @@ function PendingTaskCard({
         />
       )}
       {showBody && (
-        <MarkdownEditor
-          value={value.body}
-          onChange={(b) => onChange({ body: b })}
-          attachFolder="publish"
-          onStatus={onStatus}
-        />
+        <Suspense fallback={<div className="editor-loading">编辑器加载中…</div>}>
+          <RichBodyEditor
+            value={value.body}
+            onChange={(b) => onChange({ body: b })}
+            attachFolder="publish"
+            onStatus={onStatus}
+          />
+        </Suspense>
       )}
     </div>
   )
@@ -197,7 +202,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   const [histDate, setHistDate] = useState(toDateStr(new Date()))
 
   // 已发布任务列表（只读查看 + 勾选完成）
-  const [pubTab, setPubTab] = useState<'history' | 'published'>('published')
+  const [pubTab, setPubTab] = useState<'publish' | 'history' | 'published'>('publish')
   const [published, setPublished] = useState<{ date: string; task: Task }[]>([])
   const [viewEntry, setViewEntry] = useState<{ date: string; task: Task } | null>(null)
   // 延期弹窗当前条目（null = 关闭）
@@ -332,30 +337,101 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
   })
 
   return (
-    <div className="publish-view">
-      <div className="date-heading">
-        <h2>任务发布</h2>
-        <button className="ghost-btn" onClick={openForm}>
-          <Plus size={14} />
-          发布任务
-        </button>
-        <span className="weekday">支持批量多任务派发；发布后自动同步到所选日期的日报中</span>
-      </div>
+    <div className="pub-view">
+      <header className="workhead">
+        <div className="wh-left">
+          <span className="wh-title wh-title--hero">任务发布</span>
+          <span className="wh-sub">批量派发 · 一次写入区间内每一天，改任意一天会同步全部</span>
+        </div>
+        <div className="wh-right">
+          <div className="seg pub-seg">
+            <button
+              className={'seg-btn' + (pubTab === 'publish' ? ' on' : '')}
+              onClick={() => setPubTab('publish')}
+            >
+              发布
+            </button>
+            <button
+              className={'seg-btn' + (pubTab === 'published' ? ' on' : '')}
+              onClick={() => setPubTab('published')}
+            >
+              已发布 {published.length}
+            </button>
+            <button
+              className={'seg-btn' + (pubTab === 'history' ? ' on' : '')}
+              onClick={() => setPubTab('history')}
+            >
+              发布历史 {history.length}
+            </button>
+          </div>
+        </div>
+      </header>
 
-      <div className="publish-tabs">
-        <button
-          className={pubTab === 'published' ? 'tab-btn active' : 'tab-btn'}
-          onClick={() => setPubTab('published')}
-        >
-          已发布任务
-        </button>
-        <button
-          className={pubTab === 'history' ? 'tab-btn active' : 'tab-btn'}
-          onClick={() => setPubTab('history')}
-        >
-          发布历史
-        </button>
-      </div>
+      {pubTab === 'publish' && (
+        <PublishPage
+          tags={tags}
+          history={history}
+          onStatus={onStatus}
+          onPublished={() => {
+            onPublished()
+            refreshHistory()
+            refreshPublished()
+          }}
+          onGoToTags={onGoToTags}
+        />
+      )}
+
+      {pubTab !== 'publish' && (
+      <div className="with-side">
+        <aside className="page-side">
+          <div className="ps-head">
+            <span>视图</span>
+          </div>
+          <div className="ps-list">
+            <button
+              className={'ps-item' + (pubTab === 'published' ? ' on' : '')}
+              onClick={() => setPubTab('published')}
+            >
+              <span className="ps-item-name">已发布</span>
+              <span className="ps-item-n">{published.length}</span>
+            </button>
+            <button
+              className={'ps-item' + (pubTab === 'history' ? ' on' : '')}
+              onClick={() => setPubTab('history')}
+            >
+              <span className="ps-item-name">发布历史</span>
+              <span className="ps-item-n">{history.length}</span>
+            </button>
+          </div>
+
+          {pubTab === 'history' && (
+            <>
+              <div className="ps-head">
+                <span>筛选</span>
+              </div>
+              <div className="ps-list ps-list--form">
+                <DropdownSelect
+                  value={histGran}
+                  options={GRANULARITY_OPTIONS}
+                  onChange={(v) => setHistGran(v as PublishGranularity)}
+                  title="筛选粒度"
+                />
+                <DatePicker value={histDate} onChange={setHistDate} title="筛选时间段" />
+                <span className="ph-range">{histRangeLabel(histGran, histDate)}</span>
+                <input
+                  className="input"
+                  placeholder="搜索标题或标签…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </aside>
+
+        <div className="page-main">
+          <div className="workscroll">
+
 
       {pubTab === 'published' && (
         <div className="published-list">
@@ -385,11 +461,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                     const t = tagById.get(id)
                     if (!t) return null
                     return (
-                      <span
-                        key={id}
-                        className="task-item-tag"
-                        style={{ borderColor: t.color, color: t.color }}
-                      >
+                      <span key={id} className="tag" style={{ '--c': t.color } as React.CSSProperties}>
                         {t.name}
                       </span>
                     )
@@ -421,28 +493,26 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
 
       {pubTab === 'history' && (
         <div className="publish-history">
-          <div className="publish-history-head">
-            <h3>发布历史</h3>
-            <div className="publish-filter">
-              <DropdownSelect
-                value={histGran}
-                options={GRANULARITY_OPTIONS}
-                onChange={(v) => setHistGran(v as PublishGranularity)}
-                title="筛选粒度"
-              />
-              <DatePicker value={histDate} onChange={setHistDate} title="筛选时间段" />
-              <span className="publish-preview muted">{histRangeLabel(histGran, histDate)}</span>
-            </div>
+          <div className="ph-toolbar">
+            <DropdownSelect
+              value={histGran}
+              options={GRANULARITY_OPTIONS}
+              onChange={(v) => setHistGran(v as PublishGranularity)}
+              title="筛选粒度"
+            />
+            <DatePicker value={histDate} onChange={setHistDate} title="筛选时间段" />
+            <span className="ph-range">{histRangeLabel(histGran, histDate)}</span>
             <input
-              className="publish-search"
+              className="input ph-search"
               placeholder="搜索标题或标签…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
           {filteredHistory.length === 0 ? (
-            <div className="task-empty">
-              {query.trim() ? '没有匹配的发布记录' : '该时间段暂无发布记录'}
+            <div className="empty-state">
+              <CalendarClock size={24} />
+              <div>{query.trim() ? '没有匹配的发布记录' : '该时间段暂无发布记录'}</div>
             </div>
           ) : (
             <div className="publish-history-list">
@@ -465,11 +535,7 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
                     const t = tagById.get(id)
                     if (!t) return null
                     return (
-                      <span
-                        key={id}
-                        className="task-item-tag"
-                        style={{ borderColor: t.color, color: t.color }}
-                      >
+                      <span key={id} className="tag" style={{ '--c': t.color } as React.CSSProperties}>
                         {t.name}
                       </span>
                     )
@@ -480,6 +546,11 @@ export default function TaskPublish({ tags, onStatus, onPublished, onGoToTags }:
             </div>
           )}
         </div>
+      )}
+
+          </div>
+        </div>
+      </div>
       )}
 
       <Modal open={showForm} title="发布任务（支持批量）" width={1080} height={680} onClose={closeForm}>

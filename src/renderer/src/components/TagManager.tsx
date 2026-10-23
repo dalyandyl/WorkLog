@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { confirmDialog } from './confirm'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import type { Tag } from '../types'
 import Modal from './Modal'
@@ -21,6 +22,41 @@ const PRESET_COLORS = [
   '#f97316',
   '#64748b'
 ]
+
+/**
+ * 标签配色：一排圆形预设色点 + 末尾一个「自定义」圆点（点开系统取色器）。
+ * 自定义点用彩虹环表示「任意色」，当前色不在预设里时则显示该颜色本身。
+ */
+function TagColorPicker({
+  value,
+  onChange
+}: {
+  value: string
+  onChange: (color: string) => void
+}) {
+  const custom = !PRESET_COLORS.includes(value.toLowerCase())
+  return (
+    <div className="tag-colors">
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={'tag-color-dot' + (value.toLowerCase() === c ? ' on' : '')}
+          style={{ '--c': c } as CSSProperties}
+          onClick={() => onChange(c)}
+          title={c}
+        />
+      ))}
+      <label
+        className={'tag-color-custom' + (custom ? ' on' : '')}
+        style={custom ? ({ '--c': value } as CSSProperties) : undefined}
+        title="自定义颜色"
+      >
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      </label>
+    </div>
+  )
+}
 
 function TagRow({
   tag,
@@ -57,7 +93,7 @@ function TagRow({
 
   if (editing) {
     return (
-      <div className="tag-row editing">
+      <div className="tag-card editing">
         <span className="tag-dot" style={{ background: color }} />
         <input
           className="tag-name-input"
@@ -69,13 +105,7 @@ function TagRow({
             if (e.key === 'Escape') cancel()
           }}
         />
-        <input
-          type="color"
-          className="tag-color-input"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-          title="修改颜色"
-        />
+        <TagColorPicker value={color} onChange={setColor} />
         <button className="icon-btn primary" onClick={save} title="保存">
           <Save size={15} />
         </button>
@@ -87,7 +117,7 @@ function TagRow({
   }
 
   return (
-    <div className="tag-row">
+    <div className="tag-card">
       <span className="tag-dot" style={{ background: tag.color }} />
       <span className="tag-name-text">{tag.name}</span>
       <span className="tag-use-info muted">
@@ -108,11 +138,13 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState(PRESET_COLORS[0])
   const [query, setQuery] = useState('')
+  const [pick, setPick] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const filteredTags = query.trim()
     ? tags.filter((t) => t.name.toLowerCase().includes(query.trim().toLowerCase()))
     : tags
+  const shownTags = pick === null ? filteredTags : filteredTags.filter((t) => t.id === pick)
 
   async function add(): Promise<void> {
     const v = newName.trim()
@@ -145,7 +177,7 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
   }
 
   async function del(id: string, name: string): Promise<void> {
-    if (window.confirm(`删除标签「${name}」？所有任务上的该标签将被移除。`)) {
+    if (await confirmDialog(`删除标签「${name}」？所有任务上的该标签将被移除。`)) {
       await window.api.deleteTag(id)
       onChanged()
       onStatus('已删除标签')
@@ -155,30 +187,58 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
   return (
     <div className="tag-manager">
       <div className="tag-manager-head">
-        <h3>标签管理</h3>
-        <button className="ghost-btn" onClick={() => setShowAdd(true)}>
+        <h3 className="wh-title wh-title--hero">标签管理</h3>
+        <button className="btn btn--primary btn--sm" onClick={() => setShowAdd(true)}>
           <Plus size={14} />
           添加标签
         </button>
       </div>
 
-      <input
-        className="tag-search"
-        placeholder="搜索标签…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-
-      <div className="tag-list">
-        {filteredTags.length === 0 ? (
-          <div className="task-empty">
-            {query.trim() ? '没有匹配的标签' : '暂无标签，点击上方「添加标签」创建一个'}
+      <div className="with-side">
+        <aside className="page-side">
+          <input
+            className="input tag-search"
+            placeholder="搜索标签…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="ps-head">
+            <span>全部标签</span>
           </div>
-        ) : (
-          filteredTags.map((t) => (
-            <TagRow key={t.id} tag={t} onRename={rename} onRecolor={recolor} onDelete={del} />
-          ))
-        )}
+          <div className="ps-list">
+            <button className={'ps-item' + (pick === null ? ' on' : '')} onClick={() => setPick(null)}>
+              <span className="ps-item-name">全部</span>
+              <span className="ps-item-n">{filteredTags.length}</span>
+            </button>
+            {filteredTags.map((t) => (
+              <button
+                key={t.id}
+                className={'ps-item' + (pick === t.id ? ' on' : '')}
+                onClick={() => setPick(pick === t.id ? null : t.id)}
+              >
+                <span className="tag-dot" style={{ '--c': t.color } as CSSProperties} />
+                <span className="ps-item-name">{t.name}</span>
+                <span className="ps-item-n">{t.useCount ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="page-main">
+          <div className="workscroll">
+            <div className="tag-wall">
+              {shownTags.length === 0 ? (
+                <div className="task-empty">
+                  {query.trim() ? '没有匹配的标签' : '暂无标签，点击上方「添加标签」创建一个'}
+                </div>
+              ) : (
+                shownTags.map((t) => (
+                  <TagRow key={t.id} tag={t} onRename={rename} onRecolor={recolor} onDelete={del} />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <Modal open={showAdd} title="添加标签" width={460} onClose={() => setShowAdd(false)}>
@@ -195,24 +255,7 @@ export default function TagManager({ tags, onChanged, onStatus }: TagManagerProp
             }}
           />
           <label className="tag-create-label">颜色</label>
-          <div className="tag-create-colors">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                className={'color-swatch' + (newColor === c ? ' active' : '')}
-                style={{ background: c }}
-                onClick={() => setNewColor(c)}
-                title={c}
-              />
-            ))}
-            <input
-              type="color"
-              className="tag-color-input"
-              value={newColor}
-              onChange={(e) => setNewColor(e.target.value)}
-              title="自定义颜色"
-            />
-          </div>
+          <TagColorPicker value={newColor} onChange={setNewColor} />
           <div className="tag-create-actions">
             <button className="tag-create-btn" onClick={add} disabled={!newName.trim()}>
               添加

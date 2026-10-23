@@ -35,7 +35,7 @@ async function countTagUsage(root: string): Promise<Map<string, number>> {
     for (const t of tasks) {
       for (const tagId of t.tags) count.set(tagId, (count.get(tagId) ?? 0) + 1)
       for (const st of t.subtasks ?? []) {
-        for (const tagId of st.tags) count.set(tagId, (count.get(tagId) ?? 0) + 1)
+        for (const tagId of st.tags ?? []) count.set(tagId, (count.get(tagId) ?? 0) + 1)
       }
     }
   }
@@ -97,4 +97,22 @@ export async function deleteTag(root: string, id: string): Promise<{ ok: boolean
   await writeTags(root, next)
   await removeTagFromAllTasks(root, id)
   return { ok: true }
+}
+
+/** 从回收站恢复标签：id 与名称都不冲突时写回 */
+export async function restoreTag(root: string, tag: Tag): Promise<void> {
+  const tags = await readTags(root)
+  if (tags.some((t) => t.id === tag.id || t.name === tag.name)) return
+  tags.push(tag)
+  await writeTags(root, tags)
+}
+
+/** 取出标签原对象并删掉（回收站用） */
+export async function takeTag(root: string, id: string): Promise<Tag | null> {
+  const tags = await readTags(root)
+  const idx = tags.findIndex((t) => t.id === id)
+  if (idx === -1) return null
+  const [tag] = tags.splice(idx, 1)
+  await writeTags(root, tags)
+  return tag
 }

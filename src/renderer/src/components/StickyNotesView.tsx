@@ -1,3 +1,4 @@
+import { confirmDialog } from './confirm'
 import { useEffect, useState } from 'react'
 import {
   Check,
@@ -84,8 +85,8 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
     refresh()
   }
 
-  function del(n: StickyNote): void {
-    if (!window.confirm('确定删除这张便签？此操作不可恢复。')) return
+  async function del(n: StickyNote): Promise<void> {
+    if (!await confirmDialog('确定删除这张便签？此操作不可恢复。')) return
     window.api.deleteStickyNote(n.id).then((r) => {
       if (r.ok) {
         if (editingId === n.id) setEditingId(null)
@@ -103,13 +104,13 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
     const editing = editingId === n.id
     return (
       <div key={n.id} className={'sticky-card' + (done ? ' done' : '') + (n.pinned && !done ? ' pinned' : '')}>
-        {n.pinned && !done && (
-          <span className="sticky-pin-badge">
-            <Pin size={11} />
-            置顶
-          </span>
-        )}
         <div className="sticky-card-top">
+          {n.pinned && !done && (
+            <span className="sticky-pin-badge">
+              <Pin size={11} />
+              置顶
+            </span>
+          )}
           {editing ? (
             <input
               className="sticky-edit-input"
@@ -172,115 +173,93 @@ export default function StickyNotesView({ onStatus }: StickyNotesViewProps) {
     )
   }
 
-  function renderSection(spec: SectionSpec, list: StickyNote[]): React.ReactNode {
-    if (list.length === 0) return null
-    const Icon = spec.icon
-    return (
-      <div className={'sticky-section' + (spec.done ? ' done' : '')}>
-        <div className="sticky-section-head">
-          <span className={'sticky-section-icon ' + spec.accent}>
-            <Icon size={14} />
-          </span>
-          <h3 className="sticky-section-title">{spec.title}</h3>
-          <span className="sticky-count">{list.length}</span>
-        </div>
-        <div className="sticky-grid">{list.map((n) => renderNote(n, spec.done))}</div>
-      </div>
-    )
-  }
 
-  const sections: SectionSpec[] = [
-    { title: '置顶中', done: false, icon: Pin, accent: 'amber' },
-    { title: '未置顶', done: false, icon: PinOff, accent: 'gray' },
-    { title: '已完成', done: true, icon: CheckCheck, accent: 'green' }
+  // 便签墙：左侧状态栏 + 瀑布流
+  const [filter, setFilter] = useState<'all' | 'pinned' | 'unpinned' | 'done'>('all')
+  const [q, setQ] = useState('')
+  const filters: { key: 'all' | 'pinned' | 'unpinned' | 'done'; label: string; count: number }[] = [
+    { key: 'all', label: '全部', count: notes.length },
+    { key: 'pinned', label: '置顶', count: pinned.length },
+    { key: 'unpinned', label: '未置顶', count: unpinned.length },
+    { key: 'done', label: '已完成', count: completed.length }
   ]
+  const byFilter =
+    filter === 'all' ? notes : filter === 'pinned' ? pinned : filter === 'unpinned' ? unpinned : completed
+  const shown = q.trim()
+    ? byFilter.filter((n) => n.text.toLowerCase().includes(q.trim().toLowerCase()))
+    : byFilter
 
   return (
     <div className="sticky-view">
-      <div className="sticky-toolbar">
-        <div className="sticky-toolbar-brand">
-          <span className="sticky-toolbar-icon">
-            <StickyNoteIcon size={18} />
-          </span>
-          <div>
-            <div className="sticky-toolbar-title">便签</div>
-            <div className="sticky-toolbar-sub">非紧急任务的每日提醒 · 置顶便签显示在日报任务列表上方</div>
-          </div>
+      <header className="workhead">
+        <div className="wh-left">
+          <span className="wh-title wh-title--hero">便签</span>
+          <span className="wh-sub">置顶的便签会出现在日报任务上方</span>
         </div>
-        <div className="sticky-toolbar-add">
-          <input
-            className="search-input sticky-add-input"
-            placeholder="写下一件想提醒自己的事…（回车添加，默认置顶）"
+        <div className="wh-right stk-add-wrap">
+          <textarea
+            className="textarea stk-add"
+            rows={2}
+            placeholder="写下一件想提醒自己的事，Ctrl + 回车添加…"
             value={draft}
             maxLength={500}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void addNote()
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                void addNote()
+              }
             }}
           />
-          <button className="new-meeting-btn" onClick={() => void addNote()}>
+          <button className="btn btn--primary btn--sm" onClick={() => void addNote()}>
             <Plus size={14} />
-            添加便签
+            添加
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* 概览统计（仿统计页） */}
-      <div className="sticky-stat-cards">
-        <div className="sticky-stat-card">
-          <span className="sticky-stat-icon blue">
-            <StickyNoteIcon size={18} />
-          </span>
-          <div>
-            <div className="sticky-stat-num">{notes.length}</div>
-            <div className="sticky-stat-label">全部便签</div>
+      <div className="with-side">
+        <aside className="page-side">
+          <input
+            className="input"
+            placeholder="搜索便签…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <div className="ps-head">
+            <span>状态</span>
           </div>
-        </div>
-        <div className="sticky-stat-card">
-          <span className="sticky-stat-icon amber">
-            <Pin size={18} />
-          </span>
-          <div>
-            <div className="sticky-stat-num">{pinned.length}</div>
-            <div className="sticky-stat-label">置顶中（显示在日报）</div>
+          <div className="ps-list">
+            {filters.map((f) => (
+              <button
+                key={f.key}
+                className={'ps-item' + (filter === f.key ? ' on' : '')}
+                onClick={() => setFilter(f.key)}
+              >
+                <span className="ps-item-name">{f.label}</span>
+                <span className="ps-item-n">{f.count}</span>
+              </button>
+            ))}
           </div>
-        </div>
-        <div className="sticky-stat-card">
-          <span className="sticky-stat-icon gray">
-            <PinOff size={18} />
-          </span>
-          <div>
-            <div className="sticky-stat-num">{unpinned.length}</div>
-            <div className="sticky-stat-label">未置顶（仅此处可见）</div>
-          </div>
-        </div>
-        <div className="sticky-stat-card">
-          <span className="sticky-stat-icon green">
-            <CheckCheck size={18} />
-          </span>
-          <div>
-            <div className="sticky-stat-num">{completed.length}</div>
-            <div className="sticky-stat-label">已完成</div>
-          </div>
-        </div>
-      </div>
+        </aside>
 
-      <div className="sticky-sections">
-        {notes.length === 0 ? (
-          <div className="sticky-empty">
-            <span className="sticky-empty-icon">
-              <StickyNoteIcon size={30} />
-            </span>
-            <p>还没有便签</p>
-            <span>用上面的输入框写下一件想提醒自己的事吧</span>
+        <div className="page-main">
+          <div className="workscroll">
+            {notes.length === 0 ? (
+              <div className="empty-state">
+                <StickyNoteIcon size={26} />
+                <div>还没有便签，用右上角的输入框写一条吧</div>
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="empty-state">
+                <StickyNoteIcon size={26} />
+                <div>{q.trim() ? '没有匹配的便签' : filter === 'done' ? '还没有已完成的便签' : '这个分组是空的'}</div>
+              </div>
+            ) : (
+              <div className="stk-wall">{shown.map((n) => renderNote(n, n.completed))}</div>
+            )}
           </div>
-        ) : (
-          <>
-            {renderSection(sections[0], pinned)}
-            {renderSection(sections[1], unpinned)}
-            {renderSection(sections[2], completed)}
-          </>
-        )}
+        </div>
       </div>
     </div>
   )

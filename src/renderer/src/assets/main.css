@@ -5851,3 +5851,229 @@ input[type='radio']:focus-visible {
   white-space: pre-wrap;
 }
 
+/* ===== 顶栏搜索框：居中 + 加长 + 放大镜 ===== */
+.topbar {
+  position: relative;
+}
+
+.topbar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 52vw);
+  display: flex;
+  align-items: center;
+}
+
+.topbar-center .search-wrap {
+  width: 100%;
+}
+
+.search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.topbar-center .search-input {
+  width: 100%;
+  padding-left: 33px;
+}
+
+.topbar-center .search-results {
+  left: 0;
+  right: 0;
+  width: auto;
+}
+
+/* ===== 正文富文本编辑器（日报正文 / 任务发布正文） ===== */
+.rich-body-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.publish-body .rich-body-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.publish-body .rich-body-editor .rich-editor-content {
+  min-height: 200px;
+}
+
+.rich-body-editor .editor-toolbar {
+  flex-wrap: wrap;
+}
+
+.rich-body-editor .toolbar-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rich-body-editor .editor-toolbar .md-editor-hint {
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rich-editor-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.editor-loading {
+  padding: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ===== 附件卡片（编辑器内与只读视图共用同一套标记） ===== */
+.attach-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 2px 4px 2px 0;
+  padding: 3px 6px 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  vertical-align: middle;
+}
+
+.attach-card .attach-ext {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 32px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.attach-card .attach-card-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.attach-card .attach-card-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.attach-card .attach-act {
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.attach-card .attach-act:hover {
+  background: var(--accent-ring);
+}
+
+.attach-card-edit {
+  cursor: default;
+  user-select: none;
+}
+
+.rich-content .attach-card {
+  margin: 4px 4px 4px 0;
+}
+
+/* ===================== 编辑器内的删除按钮 + 黄框兜底 ===================== */
+
+/* 图片节点：右上角一个小打叉（只存在于编辑态 NodeView，不会被写进磁盘内容） */
+.img-node {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 6px 0;
+  line-height: 0;
+}
+
+.img-node img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+}
+
+.img-node-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.img-node:hover .img-node-del {
+  opacity: 1;
+}
+
+.img-node-del:hover {
+  background: var(--danger);
+}
+
+/* 附件卡片上的删除按钮（与预览/下载/定位同一排） */
+.attach-card .attach-act-remove {
+  padding: 1px 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.attach-card .attach-act-remove:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/*
+ * 黄框兜底：Chromium 会给聚焦的可编辑区画焦点环（颜色取系统强调色，Windows 上常显为黄框）。
+ * 1.5.3 的老规则只覆盖 .rich-content，而当前两个编辑器（日报正文 / 会议纪要）的
+ * 结构是 .editor-wrapper > .rich-editor-content > .ProseMirror，所以在这里补齐。
+ */
+.editor-wrapper .rich-editor-content,
+.editor-wrapper .rich-editor-content:focus,
+.editor-wrapper .rich-editor-content:focus-within,
+.editor-wrapper .ProseMirror,
+.editor-wrapper .ProseMirror:focus,
+.editor-wrapper .ProseMirror:focus-visible,
+.editor-wrapper .ProseMirror > * {
+  outline: none;
+}
+
+
