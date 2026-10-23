@@ -14,3 +14,6 @@ src/main/updater-config.ts
 
 # 本地截图 / 探针草稿区（截图、演示数据、临时脚本，仅本地）
 mockups/
+
+# 记忆库（会话日志 / 架构笔记，属于个人工作区，不进仓库）
+memory-bank/
