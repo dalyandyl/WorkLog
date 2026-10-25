@@ -97,6 +97,35 @@ function appIconPath(): string {
     : path.join(app.getAppPath(), 'build', 'icon.png')
 }
 
+/**
+ * 应用版本号（标题栏 / 关于系统 / 更新公告都读这里）。
+ *
+ * 打包后 app.getVersion() 读的是安装包里的 package.json，准确；
+ * 但开发模式（electron-vite 直接以 out/main/index.js 为入口）下 app.getAppPath() 是 <项目>/out/main，
+ * 在那里找不到 package.json，Electron 会退回**它自己的版本**（如 44.0.0）。
+ * 这就是标题栏版本号停在旧版本号上的根因之一，所以开发模式向上找一次项目 package.json。
+ */
+async function resolveAppVersion(): Promise<string> {
+  const version = app.getVersion()
+  if (app.isPackaged) return version
+  let dir = app.getAppPath()
+  for (let i = 0; i < 4; i++) {
+    try {
+      const raw = await fs.readFile(path.join(dir, 'package.json'), 'utf-8')
+      const pkg = JSON.parse(raw) as { name?: unknown; version?: unknown }
+      if (pkg.name === 'worklog' && typeof pkg.version === 'string' && pkg.version) {
+        return pkg.version
+      }
+    } catch {
+      /* 这一层没有 package.json，继续向上找 */
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return version
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -719,8 +748,8 @@ app.whenReady().then(async () => {
   // 应用设置里保存的更新镜像源（auto / gitee / github）
   const initSettings = await readSettings(storageRoot)
   setUpdateSource(initSettings.updateSource)
-  ipcMain.handle('app:getInfo', () => ({
-    appVersion: app.getVersion(),
+  ipcMain.handle('app:getInfo', async () => ({
+    appVersion: await resolveAppVersion(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,

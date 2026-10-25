@@ -154,6 +154,9 @@ export default function App() {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
+  // 标题栏版本号跟着程序实际版本走：以前这里写死成字符串，发版后永远显示旧版本号。
+  // 与「设置 → 关于系统」「更新公告」同源（window.api.getAppInfo().appVersion）。
+  const [appVersion, setAppVersion] = useState('')
   // 「更多」菜单：放不下的页签收进这里
   const [moreOpen, setMoreOpen] = useState(false)
   // 功能台账是个人专用模块：未输入密匙解锁前不进导航（密匙在设置 → 权限认证里录入）
@@ -196,6 +199,7 @@ export default function App() {
     window.api.listTaskDates().then((ds) => setTaskDates(new Set(ds)))
     window.api.listTags().then(setTags)
     window.api.getSettings().then(setSettings)
+    window.api.getAppInfo().then((info) => setAppVersion(info.appVersion))
     // 每次打开程序自动检测新版本；开发模式下主进程会静默返回（不弹气泡）
     void window.api.checkUpdate()
     void window.api.isWindowMaximized().then(setMaximized)
@@ -303,7 +307,7 @@ export default function App() {
             <BookOpenText size={13} strokeWidth={2.2} />
           </span>
           <span className="tb-name">日志工具</span>
-          <span className="tb-ver">1.5.5-beta1</span>
+          <span className="tb-ver">v{appVersion || '…'}</span>
         </div>
 
         <div className="tb-center" />
